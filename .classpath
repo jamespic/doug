@@ -1,0 +1,22 @@
+<classpath>
+  <classpathentry output="target/scala-2.10/classes" path="src/main/scala" kind="src"></classpathentry>
+  <classpathentry output="target/scala-2.10/classes" path="src/main/java" kind="src"></classpathentry>
+  <classpathentry output="target/scala-2.10/test-classes" path="src/test/scala" kind="src"></classpathentry>
+  <classpathentry output="target/scala-2.10/test-classes" path="src/test/java" kind="src"></classpathentry>
+  <classpathentry kind="con" path="org.scala-ide.sdt.launching.SCALA_CONTAINER"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.orientechnologies/orientdb-core/jars/orientdb-core-1.3.0.jar" sourcepath="/home/james/.ivy2/cache/com.orientechnologies/orientdb-core/srcs/orientdb-core-1.3.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.orientechnologies/orient-commons/jars/orient-commons-1.3.0.jar" sourcepath="/home/james/.ivy2/cache/com.orientechnologies/orient-commons/srcs/orient-commons-1.3.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.orientechnologies/orientdb-object/jars/orientdb-object-1.3.0.jar" sourcepath="/home/james/.ivy2/cache/com.orientechnologies/orientdb-object/srcs/orientdb-object-1.3.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/org.hibernate.javax.persistence/hibernate-jpa-2.0-api/jars/hibernate-jpa-2.0-api-1.0.0.Final.jar" sourcepath="/home/james/.ivy2/cache/org.hibernate.javax.persistence/hibernate-jpa-2.0-api/srcs/hibernate-jpa-2.0-api-1.0.0.Final-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/org.javassist/javassist/jars/javassist-3.16.1-GA.jar" sourcepath="/home/james/.ivy2/cache/org.javassist/javassist/srcs/javassist-3.16.1-GA-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.orientechnologies/orientdb-server/jars/orientdb-server-1.3.0.jar" sourcepath="/home/james/.ivy2/cache/com.orientechnologies/orientdb-server/srcs/orientdb-server-1.3.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.orientechnologies/orientdb-client/jars/orientdb-client-1.3.0.jar" sourcepath="/home/james/.ivy2/cache/com.orientechnologies/orientdb-client/srcs/orientdb-client-1.3.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.orientechnologies/orientdb-enterprise/jars/orientdb-enterprise-1.3.0.jar" sourcepath="/home/james/.ivy2/cache/com.orientechnologies/orientdb-enterprise/srcs/orientdb-enterprise-1.3.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/javax.mail/mail/jars/mail-1.4.jar" sourcepath="/home/james/.ivy2/cache/javax.mail/mail/srcs/mail-1.4-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/javax.activation/activation/jars/activation-1.1.jar" sourcepath="/home/james/.ivy2/cache/javax.activation/activation/srcs/activation-1.1-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.typesafe.akka/akka-actor_2.10/bundles/akka-actor_2.10-2.1.0.jar" sourcepath="/home/james/.ivy2/cache/com.typesafe.akka/akka-actor_2.10/srcs/akka-actor_2.10-2.1.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.typesafe/config/bundles/config-1.0.0.jar" sourcepath="/home/james/.ivy2/cache/com.typesafe/config/srcs/config-1.0.0-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/org.scalatest/scalatest_2.10/jars/scalatest_2.10-2.0.M5b.jar" sourcepath="/home/james/.ivy2/cache/org.scalatest/scalatest_2.10/srcs/scalatest_2.10-2.0.M5b-sources.jar"></classpathentry>
+  <classpathentry path="org.eclipse.jdt.launching.JRE_CONTAINER" kind="con"></classpathentry>
+  <classpathentry path="bin" kind="output"></classpathentry>
+</classpath>
