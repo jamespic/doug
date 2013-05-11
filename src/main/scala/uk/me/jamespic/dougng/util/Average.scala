@@ -1,4 +1,4 @@
-package uk.me.jamespic.dougng.model.util
+package uk.me.jamespic.dougng.util
 
 case class Average(sum: Double, count: Long) {
   def +(o: Double) = Average(sum + o, count + 1)

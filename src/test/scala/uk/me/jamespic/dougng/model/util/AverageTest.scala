@@ -3,6 +3,7 @@ package uk.me.jamespic.dougng.model.util
 import org.scalatest.FunSpec
 import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.GivenWhenThen
+import uk.me.jamespic.dougng.util.Average
 
 class AverageTest extends FunSpec with ShouldMatchers with GivenWhenThen {
   describe("An Average") {
