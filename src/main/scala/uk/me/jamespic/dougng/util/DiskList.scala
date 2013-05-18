@@ -17,84 +17,121 @@ object DiskList {
   def apply[A: Serializer](l: A*) = l.to[DiskList]
 }
 
-class DiskListBuilder[A](pagesMapped: Int = 4096)(implicit ser: Serializer[A]) extends Builder[A, DiskList[A]] {
+class DiskListBuilder[A](writePagesMapped: Int = 256, readPagesMapped: Int = 32)(implicit ser: Serializer[A]) extends Builder[A, DiskList[A]] {
   private val objSize = ser.size.toLong
-  private var file: File = _
-  private var raf: RandomAccessFile = _
-  private var channel: FileChannel = _
-  private var written: Int  = _
-  private var currentMap: MappedByteBuffer = _
+  private var file = new FileHolder(writePagesMapped * objSize)
+  private var written: Int  = 0
 
   initialize()
 
   def +=(elem: A) = synchronized {
     if (file == null) initialize()
-    ser.serialize(elem, currentMap)
-    written += 1
-    if (currentMap.position() == currentMap.limit()) {
-      currentMap = channel.map(READ_WRITE, written * ser.size, pagesMapped * objSize)
+    file.synchronized {
+      ser.serialize(elem, file.currentMap)
+      written += 1
+      if (file.currentMap.position() == file.currentMap.limit()) {
+        file.currentMap = file.channel.map(READ_WRITE, written * ser.size, writePagesMapped * objSize)
+      }
+      this
     }
-    this
+
   }
 
   def result() = synchronized {
     if (file == null) initialize()
-    channel.close()
-    raf.close()
-    val list = new DiskList(file, written, pagesMapped)
-    clear()
-    list
+    file.synchronized {
+      val list = new DiskList(file, written, readPagesMapped)
+      clear()
+      list
+    }
   }
 
   def clear() = synchronized {
     file = null
-    raf = null
-    channel = null
     written = 0
-    currentMap = null
   }
 
-  def initialize() = synchronized {
-    file = File.createTempFile("data", ".dat")
-    file.deleteOnExit()
-    raf = new RandomAccessFile(file, "rw")
-    channel = raf.getChannel()
+  private def initialize() = synchronized {
+    file = new FileHolder(writePagesMapped * objSize)
     written = 0
-    currentMap = channel.map(READ_WRITE, 0L, pagesMapped * objSize)
+  }
+
+  /**
+   * Try to run a command. If it fails due to an IOException, perform GC and retry.
+   */
+  private def tryAndMaybeGc[A](f: => A) = {
+    try {
+      f
+    } catch {
+      case _: java.io.IOException =>
+        System.gc()
+        f
+    }
   }
 }
 
 class DiskList[A] private[util]
-		(file: File, size: Int, pagesMapped: Int = 4096)(implicit ser: Serializer[A]) extends IndexedSeq[A] with IndexedSeqLike[A, DiskList[A]] {
+		(file: FileHolder, size: Int, pagesMapped: Int)(implicit ser: Serializer[A]) extends IndexedSeq[A] with IndexedSeqLike[A, DiskList[A]] {
   private val objSize = ser.size.toLong
-  private val raf = new RandomAccessFile(file, "r")
-  private val channel = raf.getChannel()
   private var position = 0
-  private var currentMap: MappedByteBuffer = _
 
   map(0)
 
-  private def map(idx: Int) = synchronized {
+  private def map(idx: Int) = file.synchronized {
     val length = pagesMapped min (size - idx)
     position = idx
-    currentMap = channel.map(READ_ONLY, objSize * idx, objSize * length)
+    file.currentMap = file.channel.map(READ_ONLY, objSize * idx, objSize * length)
   }
 
-  override def apply(idx: Int) = synchronized {
+  override def apply(idx: Int) = file.synchronized {
     if (idx < 0 || idx >= size) throw new NoSuchElementException(s"Requested element $idx of $size")
 
     if (idx < position || idx >= position + pagesMapped) {
       map(idx)
     }
-    currentMap.position(ser.size * (idx - position))
-    ser.deserialize(currentMap)
+    file.currentMap.position(ser.size * (idx - position))
+    ser.deserialize(file.currentMap)
   }
   override def length = size
   override def newBuilder = new DiskListBuilder
+  override def toString = file.synchronized(s"DiskList(${file.raf})")
 
-  protected override def finalize = synchronized {
-    channel.close()
-    raf.close()
-    file.delete()
+  def close() = file.close()
+}
+
+/**
+ * Utility class to hold all state relevant to file. Simplifies synchronization and
+ * garbage collection
+ */
+private[util] class FileHolder(initialWindow: Long) {
+  var file: File = tryAndMaybeGc(File.createTempFile("data", ".dat"))
+  var raf: RandomAccessFile = tryAndMaybeGc(new RandomAccessFile(file, "rw"))
+  var channel: FileChannel = raf.getChannel()
+  var currentMap: MappedByteBuffer = channel.map(READ_WRITE, 0L, initialWindow)
+
+  file.deleteOnExit()
+
+  /**
+   * Try to run a command. If it fails due to an IOException, perform GC and retry.
+   */
+  private def tryAndMaybeGc[A](f: => A) = {
+    try {
+      f
+    } catch {
+      case _: java.io.IOException =>
+        System.gc()
+        f
+    }
   }
+
+  def close() = synchronized {
+    if (channel != null) channel.close()
+    if (raf != null) raf.close()
+    if (file != null) file.delete()
+    channel = null
+    raf = null
+    file = null
+  }
+
+  protected override def finalize = close()
 }
