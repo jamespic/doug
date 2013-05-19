@@ -55,19 +55,6 @@ class DiskListBuilder[A](writePagesMapped: Int = 256, readPagesMapped: Int = 32)
     file = new FileHolder(writePagesMapped * objSize)
     written = 0
   }
-
-  /**
-   * Try to run a command. If it fails due to an IOException, perform GC and retry.
-   */
-  private def tryAndMaybeGc[A](f: => A) = {
-    try {
-      f
-    } catch {
-      case _: java.io.IOException =>
-        System.gc()
-        f
-    }
-  }
 }
 
 class DiskList[A] private[util]
@@ -86,9 +73,15 @@ class DiskList[A] private[util]
   override def apply(idx: Int) = file.synchronized {
     if (idx < 0 || idx >= size) throw new NoSuchElementException(s"Requested element $idx of $size")
 
+    if (file.hibernating) {
+      file.unhibernate
+      map(idx)
+    }
+
     if (idx < position || idx >= position + pagesMapped) {
       map(idx)
     }
+
     file.currentMap.position(ser.size * (idx - position))
     ser.deserialize(file.currentMap)
   }
@@ -96,6 +89,10 @@ class DiskList[A] private[util]
   override def newBuilder = new DiskListBuilder
   override def toString = file.synchronized(s"DiskList(${file.raf})")
 
+  /**
+   * Advise this DiskList that it may not be needed for a while, and can close files
+   */
+  def hibernate() = file.hibernate()
   def close() = file.close()
 }
 
@@ -108,6 +105,7 @@ private[util] class FileHolder(initialWindow: Long) {
   var raf: RandomAccessFile = tryAndMaybeGc(new RandomAccessFile(file, "rw"))
   var channel: FileChannel = raf.getChannel()
   var currentMap: MappedByteBuffer = channel.map(READ_WRITE, 0L, initialWindow)
+  var hibernating = false
 
   file.deleteOnExit()
 
@@ -124,7 +122,28 @@ private[util] class FileHolder(initialWindow: Long) {
     }
   }
 
+  def hibernate() = synchronized {
+    if (!hibernating) {
+      currentMap = null
+      if (channel != null) channel.close()
+      if (raf != null) raf.close()
+      channel = null
+      raf = null
+      hibernating = true
+    }
+  }
+
+  def unhibernate() = synchronized {
+    if (hibernating) {
+      // Hibernate is only called when it's already read-only, so we can bring it back up read-only
+      raf = tryAndMaybeGc(new RandomAccessFile(file, "r"))
+      channel = raf.getChannel()
+      hibernating = false
+    }
+  }
+
   def close() = synchronized {
+    currentMap = null
     if (channel != null) channel.close()
     if (raf != null) raf.close()
     if (file != null) file.delete()

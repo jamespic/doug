@@ -22,13 +22,13 @@ object FanoutTuning {
     val startTime = System.currentTimeMillis
     val mrqs = new MapReduceQuickSort[Int, Double, Double](values, identity, _ + _, fanout)
     val buildTime = System.currentTimeMillis
-    for (i <- 0 to 999) {
-      mrqs.summaryBetween(1000 * i + 1, 1000 * i + 1000)
+    for (i <- 0 to 99) {
+      mrqs.summaryBetween(10000 * i + 1, 10000 * i + 10000)
     }
     val endTime = System.currentTimeMillis
     println(s"With fanout $fanout, built in ${buildTime - startTime}ms, queried in ${endTime - buildTime}ms")
-  }                                               //> With fanout 8, built in 9048ms, queried in 13780ms
-                                                  //| With fanout 16, built in 4032ms, queried in 3586ms
-                                                  //| With fanout 32, built in 3681ms, queried in 1456ms
-                                                  //| With fanout 64, built in 4831ms, queried in 1420ms
+  }                                               //> With fanout 8, built in 9822ms, queried in 1760ms
+                                                  //| With fanout 16, built in 5645ms, queried in 187ms
+                                                  //| With fanout 32, built in 4947ms, queried in 67ms
+                                                  //| With fanout 64, built in 5218ms, queried in 246ms
 }

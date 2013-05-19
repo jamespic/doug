@@ -7,7 +7,7 @@ import uk.me.jamespic.dougng.util.MapReduceQuickSort
 
 class MapReduceQuickSortTest extends FunSpec with ShouldMatchers with GivenWhenThen {
   describe("A MapReduceQuickSort") {
-    describe("Containing the integers between 1 and 10000") {
+    describe("containing the integers between 1 and 10000") {
       val values = for (i <- 1 to 10000) yield (i, i)
       val instance = new MapReduceQuickSort[Int, Int, Int](values, identity, _ + _)
 
@@ -23,6 +23,27 @@ class MapReduceQuickSortTest extends FunSpec with ShouldMatchers with GivenWhenT
       it("should have a null summary value between 1000000 and 2000000") {
         instance.summaryBetween(1000000, 2000000) should equal(None)
       }
+    }
+    describe("containing the integers from 0 to 10000 in steps of 10") {
+      val values = for (i <- 0 to 10000 by 10) yield (i, i)
+      val instance = new MapReduceQuickSort[Int, Int, Int](values, identity, _ + _)
+      
+      it("should calculate leastUpperBound correctly") {
+        instance.leastUpperBound(55) should equal(Some(60))
+        instance.leastUpperBound(100) should equal(Some(100))
+        instance.leastUpperBound(0) should equal(Some(0))
+        instance.leastUpperBound(-1) should equal(Some(0))
+        instance.leastUpperBound(10000) should equal(Some(10000))
+        instance.leastUpperBound(10001) should equal(None)
+      }
+    }
+    it("should survive hibernating") {
+      val values = for (i <- 1 to 100) yield (i, i)
+      val instance = new MapReduceQuickSort[Int, Int, Int](values, identity, _ + _)
+
+      instance.summaryBetween(1, 100) should equal(Some(5050))
+      instance.hibernate()
+      instance.summaryBetween(1, 100) should equal(Some(5050))
     }
   }
 }

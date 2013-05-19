@@ -191,8 +191,10 @@ class MapReduceQuickSort[K, V, S](input: IndexedSeq[(K, V)],
   // FIXME: Test this
   def leastUpperBound(k: K): Option[K] = leastUpperBound(k, rootNode)
   private def leastUpperBound(k: K, node: TreeNode[K, S]): Option[K] = {
-    if (k < node.lowKey || k > node.highKey) {
+    if (k > node.highKey) {
       None
+    } else if (k < node.lowKey) {
+      Some(node.lowKey)
     } else {
       node.children match {
         case Some(Slice(child, children)) =>
@@ -203,6 +205,15 @@ class MapReduceQuickSort[K, V, S](input: IndexedSeq[(K, V)],
           entries.collectFirst {case (ek, ev) if k <= ek => ek}
       }
     }
+  }
+
+  /**
+   * Advise this MapReduceQuickSort that it may not be needed for a while, and
+   * can close files opened
+   */
+  def hibernate() = {
+    list.hibernate()
+    tree.hibernate()
   }
 
 }
