@@ -13,7 +13,7 @@ object MapReduceQuickSort {
   val DefaultFanout = 32
 }
 
-class MapReduceQuickSort[K, V, S](input: IndexedSeq[(K, V)],
+class MapReduceQuickSort[K, V, S](input: Seq[(K, V)],
     map: V => S,
     reduce: (S, S) => S,
     fanout: Int = MapReduceQuickSort.DefaultFanout)
@@ -131,13 +131,16 @@ class MapReduceQuickSort[K, V, S](input: IndexedSeq[(K, V)],
         }
       } finally {
         // Part is never used again, so we free it
-        if (part.isInstanceOf[DiskList[_]]) part.asInstanceOf[DiskList[_]].close()
+        part match {case l: DiskList[_] => l.close()}
       }
     }
     // Add indexes to data
     val indexedData = input.view.zipWithIndex.map{case ((k, v), i) => ((k, i),v)}.to[DiskList]
-    (sort(indexedData),
-        listBuilder.result(),treeBuilder.result())
+    try {
+      (sort(indexedData), listBuilder.result(),treeBuilder.result())
+    } finally {
+      input match {case l: DiskList[_] => l.hibernate()}
+    }
   }
 
   // Methods start here
@@ -188,21 +191,38 @@ class MapReduceQuickSort[K, V, S](input: IndexedSeq[(K, V)],
     }
   }
 
-  // FIXME: Test this
   def leastUpperBound(k: K): Option[K] = leastUpperBound(k, rootNode)
   private def leastUpperBound(k: K, node: TreeNode[K, S]): Option[K] = {
     if (k > node.highKey) {
       None
-    } else if (k < node.lowKey) {
+    } else if (k <= node.lowKey) {
       Some(node.lowKey)
     } else {
       node.children match {
         case Some(Slice(child, children)) =>
           val childNodes = tree.view.slice(child, child + children)
-          childNodes.flatMap(leastUpperBound(k, _)).find(k <= _)
+          childNodes.flatMap(leastUpperBound(k, _)).headOption
         case None =>
           val entries = list.view.slice(node.recs.start, node.recs.start + node.recs.length)
           entries.collectFirst {case (ek, ev) if k <= ek => ek}
+      }
+    }
+  }
+
+  def greatestLowerBound(k: K): Option[K] = greatestLowerBound(k, rootNode)
+  private def greatestLowerBound(k: K, node: TreeNode[K, S]): Option[K] = {
+    if (k >= node.highKey) {
+      Some(node.highKey)
+    } else if (k < node.lowKey) {
+      None
+    } else {
+      node.children match {
+        case Some(Slice(child, children)) =>
+          val childNodes = tree.view.slice(child, child + children)
+          childNodes.flatMap(greatestLowerBound(k, _)).lastOption
+        case None =>
+          val entries = list.view.slice(node.recs.start, node.recs.start + node.recs.length)
+          entries.takeWhile({case (ek, ev) => ek <= k}).lastOption.map(_._1)
       }
     }
   }
@@ -214,6 +234,11 @@ class MapReduceQuickSort[K, V, S](input: IndexedSeq[(K, V)],
   def hibernate() = {
     list.hibernate()
     tree.hibernate()
+  }
+
+  def close() = {
+    list.close()
+    tree.close()
   }
 
 }

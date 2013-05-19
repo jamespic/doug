@@ -33,41 +33,30 @@ package object util {
       }
     }
 
-    def indexedProp(cls: OClass, propName: String, propType: OType) = {
-      val prop = cls.createProperty(propName, propType)
-      //prop.setMandatory(true)
-      //prop.setNotNull(true)
-      val idxName = s"idx_${cls.getName}_$propName"
-      cls.createIndex(idxName, OClass.INDEX_TYPE.NOTUNIQUE, propName)
-      prop
-    }
-
     implicit class PropReq(val prop: OProperty) {
       def required = prop.setMandatory(true).setNotNull(true)
     }
 
     val testCls = ensureClass("Test") {cls =>
-      indexedProp(cls, "name", STRING).required
-      cls.createProperty("startTime", DATETIME)
+      cls.createProperty("startTime", DATETIME).required
+      cls.createProperty("name", STRING)
     }
 
     val sampleCls = ensureClass("Sample") {cls =>
-      indexedProp(cls, "timestamp", DATETIME).required
-      indexedProp(cls, "name", STRING).required
-      indexedProp(cls, "success", BOOLEAN)
-      indexedProp(cls, "responseCode", INTEGER)
-      indexedProp(cls, "url", STRING)
+      cls.createProperty("timestamp", DATETIME).required
+      cls.createProperty("name", STRING)
+      cls.createProperty("success", BOOLEAN)
+      cls.createProperty("responseCode", INTEGER)
+      cls.createProperty("url", STRING)
       cls.createProperty("parent", LINK, cls)
       cls.createProperty("children", LINKLIST, cls)
       cls.createProperty("test", LINK, testCls)
     }
 
     val counterCls = ensureClass("Counter") {cls =>
-      indexedProp(cls, "name", STRING).required
-
       cls.createProperty("parent", LINK, sampleCls)
+      cls.createProperty("name", STRING).required
       cls.createProperty("value", DOUBLE).required
-
       sampleCls.createProperty("counters", LINKSET, cls)
     }
   }

@@ -22,6 +22,7 @@ class Dataset {
   @Id var id: String = _
   var metric: String = _
   var rowName: String = _
+  var timestamp: String = "timestamp"
   var table: String = "Sample"
   var whereClause: String = _
   @Version var version: String = _
