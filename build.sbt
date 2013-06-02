@@ -21,3 +21,6 @@ libraryDependencies ++=  Seq(
   "com.chuusai" %% "shapeless" % "1.2.4"
 )
 
+libraryDependencies <++= (scalaVersion)(sv =>
+    Seq("org.scala-lang" % "scala-reflect" % sv)
+)

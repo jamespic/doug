@@ -5,6 +5,7 @@ import shapeless._
 import java.util.Date
 
 object Serializer {
+
   implicit object IntSerializer extends Serializer[Int] {
     val size = 4
     def serialize(value: Int, buffer: ByteBuffer) = buffer.putInt(value)
@@ -47,9 +48,8 @@ object Serializer {
     def deserialize(buffer: ByteBuffer) = buffer.get()
   }
 
-  implicit def OptionSerializer[A](implicit ser: Serializer[A]) = {
-    new Serializer[Option[A]] {
-      val size = 1 + ser.size
+  class OptionSerializer[A](implicit ser: Serializer[A]) extends Serializer[Option[A]] {
+    val size = 1 + ser.size
       def serialize(value: Option[A], buffer: ByteBuffer) = value match {
         case None =>
           buffer.put(0: Byte)
@@ -67,8 +67,41 @@ object Serializer {
             Some(ser.deserialize(buffer))
         }
       }
-    }
   }
+
+  implicit def OptionSerializer[A: Serializer] = new OptionSerializer[A]
+
+  class EitherSerializer[A, B](implicit sera: Serializer[A], serb: Serializer[B])
+      extends Serializer[Either[A, B]] {
+    val size = 1 + (sera.size max serb.size)
+    val seraSkip = 0 max (serb.size - sera.size)
+    val serbSkip = 0 max (sera.size - serb.size)
+    
+      def serialize(value: Either[A, B], buffer: ByteBuffer) = value match {
+        case Left(a) =>
+          buffer.put(0: Byte)
+          sera.serialize(a, buffer)
+          buffer.position(buffer.position + seraSkip)
+        case Right(b) =>
+          buffer.put(1: Byte)
+          serb.serialize(b, buffer)
+          buffer.position(buffer.position + serbSkip)
+      }
+      def deserialize(buffer: ByteBuffer) = {
+        buffer.get match {
+          case 0 =>
+            val ret = sera.deserialize(buffer)
+            buffer.position(buffer.position + seraSkip)
+            Left(ret)
+          case 1 =>
+            val ret = serb.deserialize(buffer)
+            buffer.position(buffer.position + serbSkip)
+            Right(ret)
+        }
+      }
+  }
+  
+  implicit def eitherSerializer[A: Serializer, B: Serializer] = new EitherSerializer[A, B]
 
   implicit object HNilSerializer extends Serializer[HNil] {
     val size = 0
@@ -458,13 +491,15 @@ object Serializer {
     implicitly[Serializer[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)]]
   }
 
-  def isoSerializer[A, B](implicit ser: Serializer[B], iso: Iso[A, B]) = {
+  def isoSerializer[A, B](implicit ser: Serializer[B], iso: Iso[A, B]): Serializer[A] = {
     new Serializer[A] {
       val size = ser.size
       def serialize(value: A, buffer: ByteBuffer) = ser.serialize(iso.to(value), buffer)
       def deserialize(buffer: ByteBuffer) = iso.from(ser.deserialize(buffer))
     }
   }
+
+  def isoSerializer[A, B](iso: Iso[A, B])(implicit ser: Serializer[B]): Serializer[A] = isoSerializer(ser, iso)
 }
 
 trait Serializer[A] {
