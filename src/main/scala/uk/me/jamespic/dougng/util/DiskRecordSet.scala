@@ -4,7 +4,7 @@ import shapeless.Iso
 import java.nio.channels.FileChannel.MapMode._
 
 object DiskRecordSet {
-  val DefaultExtentSize = 24
+  val DefaultExtentSize = 32
 }
 
 class DiskRecordSet[A](extentSize: Int = DiskRecordSet.DefaultExtentSize)

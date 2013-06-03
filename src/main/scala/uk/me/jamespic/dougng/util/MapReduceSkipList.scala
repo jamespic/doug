@@ -166,7 +166,7 @@ class MapReduceSkipList[K: Ordering, V, S, I]
       newRecord
     }
     val newAddress = patchedRecs ++ address.drop(newHeight)
-    if ((newHeight == lanes.size) && rollDice) addRow(k, newAddress) else newAddress
+    if ((newHeight == height) && rollDice) addRow(k, newAddress) else newAddress
   }
 
   private def invalidateSummaries(address: Address) = {
