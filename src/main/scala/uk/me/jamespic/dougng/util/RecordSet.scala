@@ -1,21 +1,20 @@
 package uk.me.jamespic.dougng.util
 
-trait RecordSet[A] extends Hibernatable {
-  type IndexType
+trait RecordSet[A, I] extends Hibernatable {
   type ExtentType <: Extent
   type RecordType <: Record
 
   def apply(): ExtentType
-  def apply(index: IndexType): RecordType
+  def apply(index: I): RecordType
 
   trait Extent {
-    def apply(a: A): Record
+    def apply(a: A): RecordType
   }
 
   trait Record {
-      def index: IndexType
-      def apply(): A
-      def update(a: A): Unit
-      def save: Unit
-    }
+    def index: I
+    def apply(): A
+    def update(a: A): Unit
+    def save: Unit
+  }
 }

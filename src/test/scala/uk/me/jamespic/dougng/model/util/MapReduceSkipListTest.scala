@@ -7,14 +7,37 @@ import uk.me.jamespic.dougng.util._
 
 class MapReduceSkipListTest extends FunSpec with ShouldMatchers with GivenWhenThen {
   describe("A MapReduceSkipList") {
-    /*it("should be constructible in order") {
-      val uni = new DiskUniverse
-      val instance = new MapReduceSkipList[Serializer, DiskUniverse, Long, Long, Long](_.sum, _.sum, uni, 2)
+    describe("constructed in order") {
+      val instance = new MapReduceSkipList[Long, Long, Long, Long](_.sum, _.sum, new DiskRecordSet, 4)
       for (i <- 1L to 1000L) {
         instance += (i -> i)
       }
-      println(instance.address(500L))
+      
+      it("should contain all elements in order") {
+        var last = 0L
+        for ((k, v) <- instance.iterator) {
+          k should equal(v)
+          k should be >(last)
+          last = k
+        }
+      }
     }
+    describe("constructed out of order") {
+      val instance = new MapReduceSkipList[Long, Long, Long, Long](_.sum, _.sum, new DiskRecordSet, 4)
+      for (i <- 1000L to 1L by -1L) {
+        instance += (i -> i)
+      }
+      
+      it("should contain all elements in order") {
+        var last = 0L
+        for ((k, v) <- instance.iterator) {
+          k should equal(v)
+          k should be >(last)
+          last = k
+        }
+      }
+    }
+    /*
     describe("containing the integers between 1 and 10000") {
       val values = for (i <- 1 to 10000) yield (i, i)
       val instance = new MapReduceQuickSort[Int, Int, Int](values, identity, _ + _)

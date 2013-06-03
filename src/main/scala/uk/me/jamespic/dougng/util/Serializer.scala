@@ -4,7 +4,7 @@ import java.nio.ByteBuffer
 import shapeless._
 import java.util.Date
 
-object Serializer {
+object Serializer extends LowPriorityImplicits {
 
   implicit object IntSerializer extends Serializer[Int] {
     val size = 4
@@ -48,60 +48,61 @@ object Serializer {
     def deserialize(buffer: ByteBuffer) = buffer.get()
   }
 
-  class OptionSerializer[A](implicit ser: Serializer[A]) extends Serializer[Option[A]] {
-    val size = 1 + ser.size
-      def serialize(value: Option[A], buffer: ByteBuffer) = value match {
-        case None =>
-          buffer.put(0: Byte)
-          buffer.position(buffer.position + ser.size)
-        case Some(a) =>
-          buffer.put(1: Byte)
-          ser.serialize(a, buffer)
-      }
-      def deserialize(buffer: ByteBuffer) = {
-        buffer.get match {
-          case 0 =>
-            buffer.position(buffer.position + ser.size)
-            None
-          case 1 =>
-            Some(ser.deserialize(buffer))
-        }
-      }
+  object NoneSerializer extends Serializer[None.type] {
+    val size = 0
+    def serialize(value: None.type, buffer: ByteBuffer) = ()
+    def deserialize(buffer: ByteBuffer) = None
   }
 
-  implicit def OptionSerializer[A: Serializer] = new OptionSerializer[A]
+  class OptionSerializer[A: Serializer] extends MultiSerializer[Option[A]](
+      (0, None.getClass, NoneSerializer),
+      (1, classOf[Some[A]], caseClassSerializer(Some.apply[A] _, Some.unapply[A] _))
+  )
+
+  implicit def optionSerializer[A: Serializer] = new OptionSerializer[A]
 
   class EitherSerializer[A, B](implicit sera: Serializer[A], serb: Serializer[B])
-      extends Serializer[Either[A, B]] {
-    val size = 1 + (sera.size max serb.size)
-    val seraSkip = 0 max (serb.size - sera.size)
-    val serbSkip = 0 max (sera.size - serb.size)
-    
-      def serialize(value: Either[A, B], buffer: ByteBuffer) = value match {
-        case Left(a) =>
-          buffer.put(0: Byte)
-          sera.serialize(a, buffer)
-          buffer.position(buffer.position + seraSkip)
-        case Right(b) =>
-          buffer.put(1: Byte)
-          serb.serialize(b, buffer)
-          buffer.position(buffer.position + serbSkip)
-      }
-      def deserialize(buffer: ByteBuffer) = {
-        buffer.get match {
-          case 0 =>
-            val ret = sera.deserialize(buffer)
-            buffer.position(buffer.position + seraSkip)
-            Left(ret)
-          case 1 =>
-            val ret = serb.deserialize(buffer)
-            buffer.position(buffer.position + serbSkip)
-            Right(ret)
-        }
-      }
-  }
-  
+      extends MultiSerializer[Either[A, B]] (
+          (0, classOf[Left[A, B]], caseClassSerializer(Left.apply[A, B] _, Left.unapply[A, B] _)),
+          (1, classOf[Right[A, B]], caseClassSerializer(Right.apply[A, B] _, Right.unapply[A, B] _))
+      )
+
   implicit def eitherSerializer[A: Serializer, B: Serializer] = new EitherSerializer[A, B]
+
+  class MultiSerializer[Parent](mapping: (Byte, Class[_ <: Parent], Serializer[_ <: Parent])*)
+      extends Serializer[Parent] {
+    private val maxSize = mapping.map(_._3.size).max
+    val size = 1 + maxSize
+    private def skipSize(ser: Serializer[_]) = 0 max (maxSize - ser.size)
+
+    def serialize(value: Parent, buf: ByteBuffer) = {
+      mapping find {
+        case (indicator, cls, ser) => cls.isInstance(value)
+      } map {
+        case (indicator, cls, ser) =>
+          buf.put(indicator)
+          ser.asInstanceOf[Serializer[Any]].serialize(value, buf)
+          buf.position(buf.position + skipSize(ser))
+      } orElse {
+        throw new Exception("Unrecognised object type")
+      }
+    }
+
+    def deserialize(buf: ByteBuffer) = {
+      val firstByte = buf.get
+      mapping find {
+        case (indicator, cls, ser) => indicator == firstByte
+      } map {
+        case (indicator, cls, ser) =>
+          val ret = ser.deserialize(buf)
+          buf.position(buf.position + skipSize(ser))
+          ret
+      } getOrElse {
+        buf.position(buf.position + maxSize)
+        throw new Exception("Unrecognised object type")
+      }
+    }
+  }
 
   implicit object HNilSerializer extends Serializer[HNil] {
     val size = 0
@@ -115,12 +116,6 @@ object Serializer {
       def serialize(value: CC, buffer: ByteBuffer) = ser.serialize(unapply(value).get, buffer)
       def deserialize(buffer: ByteBuffer) = apply(ser.deserialize(buffer))
     }
-  }
-
-  def caseClassSerializer[CC, C, T <: Product, L <: HList](apply : C, unapply : CC => Option[T])
-      (implicit fhl : FnHListerAux[C, L => CC], hl : HListerAux[T, L], ser: Serializer[L]) = {
-    implicit val iso = Iso.hlist(apply, unapply)
-    isoSerializer[CC, L]
   }
 
   implicit val dateSerializer = {
@@ -489,6 +484,15 @@ object Serializer {
     T22: Serializer] = {
     import ExtraImplicits._
     implicitly[Serializer[(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19, T20, T21, T22)]]
+  }
+
+}
+
+trait LowPriorityImplicits {
+  def caseClassSerializer[CC, C, T <: Product, L <: HList](apply : C, unapply : CC => Option[T])
+      (implicit fhl : FnHListerAux[C, L => CC], hl : HListerAux[T, L], ser: Serializer[L]) = {
+    implicit val iso = Iso.hlist(apply, unapply)
+    isoSerializer[CC, L]
   }
 
   def isoSerializer[A, B](implicit ser: Serializer[B], iso: Iso[A, B]): Serializer[A] = {

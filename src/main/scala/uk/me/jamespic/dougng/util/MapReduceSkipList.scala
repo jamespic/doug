@@ -5,185 +5,142 @@ import scala.collection.mutable.ArrayBuffer
 import java.util.Random
 
 object MapReduceSkipList {
+  import Serializer.{caseClassSerializer, MultiSerializer}
   val DefaultFanout = 32
 
-  case class LeafNode[K, V](key: K, value: V, next: Option[Long])
-  case class BranchNode[K, S](key: K, summary: S, next: Option[Long], down: Long)
-  type Node[K, V, S] = Either[LeafNode[K, V], BranchNode[K, S]]
+  sealed trait Node[K, V, S, I] {
+    type ThisType <: Node[K, V, S, I]
+    val next: Option[I]
+    def withNext(n: Option[I]): ThisType
 
-  object LeafNode {
-    implicit def serializer[K: Serializer, V: Serializer] = Serializer.caseClassSerializer(LeafNode.apply[K, V] _, LeafNode.unapply[K, V] _)
-  }
-  object BranchNode {
-    implicit def serializer[K: Serializer, S: Serializer] = Serializer.caseClassSerializer(BranchNode.apply[K, S] _, BranchNode.unapply[K, S] _)
-  }
-}
-/*
-object MapReduceSkipList {
-  val DefaultFanout = 32
-
-  sealed trait Node[K, Next] {
-    def key: K
-    def next: Option[Next]
-    def next_=(next: Option[Next]): Unit
+    val summary: Option[S] = None
+    val downOpt: Option[I] = None
+    val keyOpt: Option[K] = None
+    val valueOpt: Option[V] = None
   }
 
-  final class LeafNode[K, V, Next](val key: K, val value: V, var next: Option[Next]) extends Node[K, Next] {
-    override def toString = s"LeafNode($key, $value, $next)"
-  }
-  object LeafNode {
-    def iso[K, V, Next] = new Iso[LeafNode[K, V, Next], K :: V :: Option[Next] :: HNil] {
-      def to(node: LeafNode[K, V, Next]) = node.key :: node.value :: node.next :: HNil
-      def from(hlist: K :: V :: Option[Next] :: HNil) = hlist match {
-       case key :: value :: next :: HNil => new LeafNode(key, value, next)
-      }
-    }
-    implicit def serializer[K: Serializer, V: Serializer, Next: Serializer] = {
-      Serializer.isoSerializer(iso[K, V, Next])
-    }
-    **
-     * Helper type, to allow Typer to be defined
-     *
-    type Wrapper[K, V] = {
-      type Type[Next] = LeafNode[K, V, Next]
-    }
-    type Typer[T[_], K, V] = RecursiveTyper[T, MapReduceSkipList.LeafNode.Wrapper[K, V]#Type]
-    class RecursiveSerializer[K:Serializer, V: Serializer] extends RecursiveTyper[Serializer, Wrapper[K, V]#Type] {
-      def apply[B](s: Serializer[B]) = {
-        implicit val serb = s
-        implicitly[Serializer[LeafNode[K, V, B]]]
-      }
-    }
-    implicit def recSerializer[K: Serializer, V: Serializer] = new RecursiveSerializer[K, V]
-    implicit def recDummyTyper[K, V] = Dummy.dummyTyper[MapReduceSkipList.LeafNode.Wrapper[K, V]#Type]
+  sealed trait Branch[K, V, S, I] extends Node[K, V, S, I] {
+    val down: I
+    override val downOpt = Some(down)
+    def invalidate: ThisType
   }
 
-  final class BranchNode[K, S, Next, Down](val key: K, var value: Option[S], var next: Option[Next], var down: Down) extends Node[K, Next] {
-    override def toString = s"BranchNode($key, $value, $next, $down)"
+  case class LeafNode[K, V, S, I](key: K, value: V, next: Option[I]) extends Node[K, V, S, I] {
+    type ThisType = LeafNode[K, V, S, I]
+    def withNext(n: Option[I]) = LeafNode(key, value, n)
+
+    override val valueOpt = Some(value)
+    override val keyOpt = Some(key)
   }
-  object BranchNode {
-    def iso[K, S, Next, Down] = new Iso[BranchNode[K, S, Next, Down], K :: Option[S] :: Option[Next] :: Down :: HNil] {
-      def to(node: BranchNode[K, S, Next, Down]) = node.key :: node.value :: node.next :: node.down :: HNil
-      def from(hlist: K :: Option[S] :: Option[Next] :: Down :: HNil) = hlist match {
-       case key :: value :: next :: down :: HNil => new BranchNode(key, value, next, down)
-      }
-    }
-    implicit def serializer[K: Serializer, S: Serializer, Next: Serializer, Down: Serializer] = {
-      Serializer.isoSerializer(iso[K, S, Next, Down])
-    }
-    **
-     * Helper type, to allow Typer to be defined
-     *
-    type Wrapper[K, S, Down] = {
-      type Type[Next] = BranchNode[K, S, Down, Next]
-    }
-    class RecursiveSerializer[K: Serializer, S: Serializer, Down: Serializer] extends RecursiveTyper[Serializer, Wrapper[K, S, Down]#Type] {
-      def apply[B](s: Serializer[B]) = {
-        implicit val serb = s
-        implicitly[Serializer[BranchNode[K, S, Down, B]]]
-      }
-    }
-    type TWrapper[T[_], K, S] = {
-      type Type[Down] = RecursiveTyper[T, Wrapper[K, S, Down]#Type]
-    }
-    type TwoWayTyper[T[_], K, S] = T ~> TWrapper[T, K, S]#Type
-    class TwoWaySerializer[K: Serializer, S: Serializer] extends (Serializer ~> TWrapper[Serializer, K, S]#Type) {
-      def apply[Down](s: Serializer[Down]) = {
-        implicit val serd = s
-        new RecursiveSerializer[K, S, Down]
-      }
-    }
-    implicit def twoWaySerializer[K: Serializer, S: Serializer] = new TwoWaySerializer[K, S]
-    class TwoWayDummyTyper[K, S] extends (Dummy ~> TWrapper[Dummy, K, S]#Type) {
-      def apply[Down](dummy: Dummy[Down]) = new Dummy.DummyTyper[Wrapper[K, S, Down]#Type]
-    }
-    implicit def twoWayDummyTyper[K, S] = new TwoWayDummyTyper[K, S]
+
+  case class BranchNode[K, V, S, I](key: K, override val summary: Option[S], next: Option[I], down: I) extends Branch[K, V, S, I] {
+    type ThisType = BranchNode[K, V, S, I]
+    def withNext(n: Option[I]) = BranchNode(key, summary, n, down)
+    def invalidate = BranchNode[K, V, S, I](key, None, next, down)
+
+    override val keyOpt = Some(key)
+  }
+
+  case class HeadBranchNode[K, V, S, I](next: Option[I], override val summary: Option[S], down: I) extends Branch[K, V, S, I] {
+    type ThisType = HeadBranchNode[K, V, S, I]
+    def withNext(n: Option[I]) = HeadBranchNode(n, summary, down)
+    def invalidate = HeadBranchNode(next, None, down)
+  }
+
+  case class HeadLeafNode[K, V, S, I](next: Option[I]) extends Node[K, V, S, I] {
+    type ThisType = HeadLeafNode[K, V, S, I]
+    def withNext(n: Option[I]) = HeadLeafNode(n)
+  }
+
+  implicit def nodeSerializer[K: Serializer, V: Serializer, S: Serializer, I: Serializer] = {
+    new MultiSerializer[Node[K, V, S, I]](
+      (0, classOf[LeafNode[K,V,S,I]], caseClassSerializer(LeafNode.apply[K, V, S, I] _, LeafNode.unapply[K, V, S, I] _)),
+      (1, classOf[BranchNode[K,V,S,I]], caseClassSerializer(BranchNode.apply[K, V, S, I] _, BranchNode.unapply[K, V, S, I] _)),
+      (2, classOf[HeadBranchNode[K,V,S,I]], caseClassSerializer(HeadBranchNode.apply[K, V, S, I] _, HeadBranchNode.unapply[K, V, S, I] _)),
+      (3, classOf[HeadLeafNode[K,V,S,I]], caseClassSerializer(HeadLeafNode.apply[K, V, S, I] _, HeadLeafNode.unapply[K, V, S, I] _))
+    )
   }
 }
 
-class MapReduceSkipList[T[_], F <: RecordUniverse[T], K: T, V: T, S: T](
-    reduce: Traversable[V] => S,
-    rereduce: Traversable[S] => S,
-    universe: F,
-    fanout: Int = MapReduceSkipList.DefaultFanout)
-    (implicit ordering: Ordering[K],
-     leafTyper: MapReduceSkipList.LeafNode.Typer[T, K, V],
-     branchTyper: MapReduceSkipList.BranchNode.TwoWayTyper[T, K, S])
-    extends Hibernatable {
+class MapReduceSkipList[K: Ordering, V, S, I]
+    (reduce: Traversable[V] => S,
+     rereduce:  Traversable[S] => S,
+     rs: RecordSet[MapReduceSkipList.Node[K, V, S, I], I],
+     fanout: Int = MapReduceSkipList.DefaultFanout) extends Hibernatable {
   import MapReduceSkipList._
   import Ordering.Implicits._
 
-  private type Record[A] = universe.RecordSetType[A]#Record
-  private type Index[A] = universe.RecordSetType[A]#Index
+  private type Record = rs.RecordType
+  private type Extent = rs.ExtentType
+  private type Address = List[Record]
 
-   *
-   * Addresses are lists of records (containing nodes). Leaf nodes are first,
-   * with root nodes last.
-   *
-  private type Address = List[Record[_]]
-
-  private var random = new Random(0)
-  private var head: Option[Record[_]] = None
-  private var tail: List[Record[_]] = Nil
-  private var lanes: List[universe.RecordSetType[_]] = {
-    List(universe.recursive[LeafNode.Wrapper[K, V]#Type](leafTyper))
+  // Update height when adding lanes
+  private var _lanes: List[Extent] = List(rs())
+  private var _height = 1
+  private def height = _height
+  private def lanes = _lanes
+  private def lanes_=(l: List[Extent]) = sync {
+    _lanes = l
+    _height = lanes.size
   }
 
-  override def hibernate() = universe.hibernate()
-  override def sync[B](f: => B) = universe.sync(f)
+  private val random = new Random()
+  private var root: Record = lanes(0)(HeadLeafNode(None))
+  private var tail: Address = List(root)
 
-  private def firstLane = universe.sync {
-    val lane = lanes.head
-    lane.asInstanceOf[universe.RecordSetType[LeafNode[K, V, lane.IndexType]]]
-  }
-
-  def +=(e: (K, V)) = universe.sync {
-    val (k, v) = e
-    head match {
-      case None =>
-        val rec = firstLane.addRec(new LeafNode(k, v, None))
-        head = Some(rec)
-        tail = List(rec)
-        ()
-      case Some(node) =>
-        val lastK = tail.last().asInstanceOf[Node[K, _]].key
-        if (k >= lastK) {
-          // short circuit, for already-ordered data
-          tail = insert(k, v, tail)
-        } else {
-          ???
-        }
-        ()
-    }
-  }
+  private def lastK = tail.headOption flatMap {head => head().keyOpt}
 
   private def rollDice = random.nextInt(fanout) == 0
 
-  private def selectHeight = {
+  private def selectHeight = sync {
     var newHeight = 1
-    val currentHeight = lanes.size
-    while (rollDice && newHeight < currentHeight) {
+    while (rollDice && newHeight < height) {
       newHeight += 1
     }
     newHeight
   }
 
-  private def insert(k: K, v: V, address: Address): Address = universe.sync {
+  private def inTail(k: K) = sync {
+    lastK match {
+      case Some(lk) if k < lk =>
+        // Not in tail, because it's not greater than head
+        false
+      case _ =>
+        // In tail, because head is either empty, or smaller than k
+        true
+    }
+  }
+
+  def +=(e: (K, V)) = sync {
+    val (k, v) = e
+    if (inTail(k)) {
+      tail = insert(k, v, tail)
+    } else {
+      val address = findAddress(k)
+      insert(k, v, address)
+      tail = regenerateTail()
+    }
+  }
+
+  private def insert(k: K, v: V, address: Address): Address = sync {
     invalidateSummaries(address)
-    var newHeight = selectHeight
+    val newHeight = selectHeight
 
-
-    var lastRecordCreated: Option[Record[_]] = None
+    var down: Option[I] = None
     val patchedRecs = for ((lane, oldRecord) <- (lanes zip address).take(newHeight)) yield {
-      val oldNode = oldRecord().asInstanceOf[Node[K, lane.IndexType]]
+      val oldNode = oldRecord()
       val oldNext = oldNode.next
-      val newNode = lastRecordCreated match {
-        case None => new LeafNode(k, v, oldNext)
-        case Some(rec) => new BranchNode(k, None, oldNext, rec.index)
+      val newNode: Node[K, V, S, I] = down match {
+        case None =>
+          require(!oldNode.isInstanceOf[Branch[K, V, S, I]])
+          LeafNode(k, v, oldNext)
+        case Some(idx) =>
+          require(oldNode.isInstanceOf[Branch[K, V, S, I]])
+          BranchNode(k, None, oldNext, idx)
       }
-      val newRecord = lane.asInstanceOf[universe.RecordSetType[Any]].addRec(newNode)
-      lastRecordCreated = Some(newRecord)
-      oldNode.next = Some(newRecord.index.asInstanceOf[lane.IndexType])
+      val newRecord = lane(newNode)
+      down = Some(newRecord.index)
+      oldRecord() = oldNode withNext Some(newRecord.index)
       oldRecord.save
       newRecord
     }
@@ -191,78 +148,120 @@ class MapReduceSkipList[T[_], F <: RecordUniverse[T], K: T, V: T, S: T](
     if ((newHeight == lanes.size) && rollDice) addRow(k, newAddress) else newAddress
   }
 
-  private def addRow(k: K, address: Address): Address = {
-    val lane = addLane.asInstanceOf[universe.RecordSetType[Any]]
-    val lastRec = address.last
-    if (head.get.index == lastRec.index) {
-      val newHeadNode = new BranchNode(k, None, None, lastRec.index)
-      val newRec = lane.addRec(newHeadNode)
-      head = Some(newRec)
-      address :+ newRec
-    } else {
-      val newHeadNode = new BranchNode(k, None, (None: Option[lane.IndexType]), head.get.index)
-      val newHeadRec = lane.addRec(newHeadNode)
-      val newAddressNode = new BranchNode(k, None, None, lastRec.index)
-      val newAddressRec = lane.addRec(newAddressNode)
-      newHeadNode.next = Some(newAddressRec.index)
-      newHeadRec.save
-      head = Some(newHeadRec)
-      address :+ newAddressRec
-    }
+  private def invalidateSummaries(address: Address) = sync {
+    for {record <- address
+      node = record()
+      if node.summary.isDefined
+      } {
+        record() = node.asInstanceOf[Branch[K, V, S, I]].invalidate
+        record.save
+      }
   }
 
-  private def addLane() = {
-    val oldLastLane = lanes.last
-    val typer = branchTyper.apply(oldLastLane.reifyIndex)
-    val newLane = universe.recursive[BranchNode.Wrapper[K, S, oldLastLane.IndexType]#Type](typer)
+  private def addRow(k: K, address: Address): Address = sync {
+    val lane = addLane()
+    val lastRec = address.last
+    val newRec = lane(BranchNode(k, None, None, lastRec.index))
+    root() = root() withNext Some(newRec.index)
+    root.save
+    address :+ newRec
+  }
+
+  private def addLane() = sync {
+    val newLane = rs()
     lanes :+= newLane
+    val oldRootIndex = root.index
+    root = newLane(HeadBranchNode(None, None, oldRootIndex))
     newLane
   }
 
-  private def invalidateSummaries(address: Address) = {
-    for (record <- address; node = record();
-         if node.isInstanceOf[BranchNode[K, S, _, _]];
-         typedNode = node.asInstanceOf[BranchNode[K, S, _, _]];
-         if typedNode.value.isDefined
-         ) {
-      typedNode.value = None
-      record.save
-    }
-  }
 
-  private def findAddress(k: K) = {
-    val lastK = tail.head().asInstanceOf[Node[K, _]].key
-    if (k >= lastK) tail
+  private def findAddress(k: K) = sync {
+    if (inTail(k)) tail
     else {
-      partialAddress(k, head.get, Nil)
+      partialAddress(k, root, Nil)
     }
   }
 
   //For debugging - delete when done
-  def address(k: K): Any = universe.sync(findAddress(k))
+  def address(k: K): Any = sync(findAddress(k))
 
-  private def partialAddress(k: K, currentNode: Record[_], currentAddress: Address): Address = {
-    val node = currentNode()
+  private def partialAddress(k: K, currentRecord: Record, currentAddress: Address): Address = sync {
+    val node = currentRecord()
     node match {
-      case leaf: LeafNode[K, V, _] =>
+      case branch: Branch[K, V, S, I] =>
+        val nextOpt = branch.next
+        nextOpt match {
+          case Some(next) =>
+            val nextRec = rs(next)
+            nextRec().keyOpt match {
+              case Some(nextKey) => if (nextKey <= k) {
+                  partialAddress(k, nextRec, currentAddress)
+                } else {
+                  partialAddress(k, rs(branch.down), currentRecord :: currentAddress)
+                }
+              case None => ??? // Next should never be a head node
+            }
+          case None =>
+            partialAddress(k, rs(branch.down), currentRecord :: currentAddress)
+        }
+      case leaf =>
         val next = leaf.next
         next match {
-          case Some(next: Index[LeafNode[K, V, _]]) if next.get().key < k =>
-            partialAddress(k, next.get, currentAddress)
-          case _ => currentNode :: currentAddress
-        }
-      case branch: BranchNode[K, S, _, _] =>
-        val nextOpt = branch.next
-        println(branch)
-        nextOpt.foreach(x => println(x.asInstanceOf[Index[_]].get))
-        nextOpt match {
-          case Some(next: Index[BranchNode[K, S, _, _]]) if next.get().key < k =>
-            partialAddress(k, next.get, currentAddress)
-          case _ =>
-            val down = branch.down.asInstanceOf[Index[_]]
-            partialAddress(k, down.get.asInstanceOf[Record[_]], currentNode :: currentAddress)
+          case Some(next) =>
+            val nextRec = rs(next)
+            nextRec().keyOpt match {
+              case Some(nextKey) => if (nextKey <= k) {
+                  partialAddress(k, nextRec, currentAddress)
+                } else {
+                  currentRecord :: currentAddress
+                }
+              case None => ??? // Next should never be a head node
+            }
+          case None => currentRecord :: currentAddress
         }
     }
   }
+
+  private def regenerateTail(currentRecord: Record = root, currentAddress: Address = Nil): Address = sync {
+    currentRecord() match {
+      case branch: Branch[K, V, S, I] =>
+        branch.next match {
+          case Some(next) => regenerateTail(rs(next), currentAddress)
+          case None => regenerateTail(rs(branch.down), currentRecord :: currentAddress)
+        }
+      case leaf =>
+        leaf.next match {
+          case Some(next) => regenerateTail(rs(next), currentAddress)
+          case None => currentRecord :: currentAddress
+        }
+    }
+  }
+
+  def iterator: Iterator[(K, V)] = new FullIterator
+
+  override def sync[B](f: => B) = rs.sync(f)
+  def hibernate() = rs.hibernate()
+
+  private class FullIterator extends Iterator[(K, V)] {
+    private var record = sync(findBottom(root))
+    private def findBottom(from: Record): Record = {
+      from().downOpt match {
+        case Some(down) =>
+          findBottom(rs(down))
+        case None =>
+          from
+      }
+    }
+
+    def hasNext = sync {
+      record().next.isDefined
+    }
+
+    def next = sync {
+      record = rs(record().next.get)
+      val node = record().asInstanceOf[LeafNode[K, V, S, I]]
+      (node.key, node.value)
+    }
+  }
 }
-*/

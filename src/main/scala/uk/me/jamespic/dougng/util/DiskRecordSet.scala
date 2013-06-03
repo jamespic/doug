@@ -3,15 +3,13 @@ package uk.me.jamespic.dougng.util
 import shapeless.Iso
 import java.nio.channels.FileChannel.MapMode._
 
-object DiskUniverse {
+object DiskRecordSet {
   val DefaultExtentSize = 32
-  val DefaultWindowSize = 16384
 }
 
-class DiskUniverse[A](extentSize: Int = DiskUniverse.DefaultExtentSize)
-    (implicit ser: Serializer[A]) extends RecordSet[A] {
+class DiskRecordSet[A](extentSize: Int = DiskRecordSet.DefaultExtentSize)
+    (implicit ser: Serializer[A]) extends RecordSet[A, Long] {
   type ExtentType = DiskExtent
-  type IndexType = Long
   type RecordType = ActiveRecord
 
   private val windowSize = extentSize * ser.size
@@ -54,7 +52,7 @@ class DiskUniverse[A](extentSize: Int = DiskUniverse.DefaultExtentSize)
   override def sync[B](f: => B) = file.synchronized(f)
 
 
-  class ActiveRecord private[DiskUniverse](val index: Long, private var a: A) extends Record {
+  class ActiveRecord private[DiskRecordSet](val index: Long, private var a: A) extends Record {
     def apply() = a
     def update(v: A) = a = v
     def save = file.synchronized {
