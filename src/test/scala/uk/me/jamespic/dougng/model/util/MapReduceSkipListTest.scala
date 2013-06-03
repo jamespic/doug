@@ -7,12 +7,14 @@ import uk.me.jamespic.dougng.util._
 
 class MapReduceSkipListTest extends FunSpec with ShouldMatchers with GivenWhenThen {
   describe("A MapReduceSkipList") {
+    import MapReduceSkipList.sum
     describe("constructed in order") {
-      val instance = new MapReduceSkipList[Long, Long, Long, Long](_.sum, _.sum, new DiskRecordSet, 4)
+      val instance = new MapReduceSkipList[Long, Long, Long, Long](sum, sum, new DiskRecordSet, 32)
       for (i <- 1L to 1000L) {
         instance += (i -> i)
+        instance.summary // force it to generate summaries, to check they're being invalidated
       }
-      
+
       it("should contain all elements in order") {
         var last = 0L
         for ((k, v) <- instance.iterator) {
@@ -20,14 +22,19 @@ class MapReduceSkipListTest extends FunSpec with ShouldMatchers with GivenWhenTh
           k should be >(last)
           last = k
         }
+      }
+
+      it("should have a summary of 500500") {
+        instance.summary should equal(Some(500500L))
       }
     }
     describe("constructed out of order") {
-      val instance = new MapReduceSkipList[Long, Long, Long, Long](_.sum, _.sum, new DiskRecordSet, 4)
+      val instance = new MapReduceSkipList[Long, Long, Long, Long](sum, sum, new DiskRecordSet, 32)
       for (i <- 1000L to 1L by -1L) {
         instance += (i -> i)
+        instance.summary // force it to generate summaries, to check they're being invalidated
       }
-      
+
       it("should contain all elements in order") {
         var last = 0L
         for ((k, v) <- instance.iterator) {
@@ -35,6 +42,9 @@ class MapReduceSkipListTest extends FunSpec with ShouldMatchers with GivenWhenTh
           k should be >(last)
           last = k
         }
+      }
+      it("should have a summary of 500500") {
+        instance.summary should equal(Some(500500L))
       }
     }
     /*
