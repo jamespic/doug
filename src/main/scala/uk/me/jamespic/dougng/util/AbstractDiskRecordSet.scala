@@ -7,7 +7,7 @@ object AbstractDiskRecordSet {
   val DefaultExtentSize = 32
 }
 
-abstract class AbstractDiskRecordSet[A](extentSize: Int = DiskRecordSet.DefaultExtentSize)
+abstract class AbstractDiskRecordSet[A](extentSize: Int = AbstractDiskRecordSet.DefaultExtentSize)
     (implicit ser: Serializer[A]) extends RecordSet[A, Long] {
   type ExtentType = DiskExtent
   type RecordType = ActiveRecord

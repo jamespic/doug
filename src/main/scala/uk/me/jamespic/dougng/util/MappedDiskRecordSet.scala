@@ -3,11 +3,7 @@ package uk.me.jamespic.dougng.util
 import shapeless.Iso
 import java.nio.channels.FileChannel.MapMode._
 
-object DiskRecordSet {
-  val DefaultExtentSize = 32
-}
-
-class DiskRecordSet[A](extentSize: Int = DiskRecordSet.DefaultExtentSize)
+class MappedDiskRecordSet[A](extentSize: Int = AbstractDiskRecordSet.DefaultExtentSize)
     (implicit ser: Serializer[A]) extends AbstractDiskRecordSet[A](extentSize) {
   private val windowSize = extentSize * ser.size
   private val file = new FileHolder(windowSize)
@@ -40,7 +36,7 @@ class DiskRecordSet[A](extentSize: Int = DiskRecordSet.DefaultExtentSize)
     position = idx
   }
 
-  override def toString = s"DiskRecordSet(${file.file})"
+  override def toString = s"MappedDiskRecordSet(${file.file})"
   def hibernate() = file.hibernate()
   override def sync[B](f: => B) = file.synchronized(f)
 }

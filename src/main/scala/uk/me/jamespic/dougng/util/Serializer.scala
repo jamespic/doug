@@ -3,8 +3,12 @@ package uk.me.jamespic.dougng.util
 import java.nio.ByteBuffer
 import shapeless._
 import java.util.Date
+import scala.collection.generic.CanBuildFrom
+import scala.collection.Traversable
 
 object Serializer extends LowPriorityImplicits {
+
+  def sizeof[A](implicit ser: Serializer[A]) = ser.size
 
   implicit object IntSerializer extends Serializer[Int] {
     val size = 4
@@ -138,6 +142,60 @@ object Serializer extends LowPriorityImplicits {
         val tail = serb.deserialize(buffer)
         head :: tail
       }
+    }
+  }
+
+  class FixedCollectionSerializer[A, Col <: Traversable[A]]
+      (n: Int)(implicit ser: Serializer[A], cbf: CanBuildFrom[Nothing, A, Col])
+      extends Serializer[Col]{
+    val size = n * ser.size
+    def serialize(value: Col, buffer: ByteBuffer) = {
+      require(value.size == n)
+      for (a <- value) {
+        ser.serialize(a, buffer)
+      }
+    }
+    def deserialize(buffer: ByteBuffer) = {
+      val builder = cbf()
+      builder.sizeHint(n)
+      for (i <- 1 to n) {
+        builder += ser.deserialize(buffer)
+      }
+      builder.result()
+    }
+  }
+
+  class VariableCollectionSerializer[A, Col <: Traversable[A]]
+      (n: Int)(implicit ser: Serializer[A], cbf: CanBuildFrom[Nothing, A, Col])
+      extends Serializer[Col]{
+    val size = n * (1 + ser.size)
+    def serialize(value: Col, buffer: ByteBuffer) = {
+      var remaining = n
+      for (a <- value.take(n)) {
+        buffer.put((1).toByte)
+        ser.serialize(a, buffer)
+        remaining -= 1
+      }
+      for (i <- 0 until remaining) {
+        buffer.put((0).toByte)
+        buffer.position(buffer.position + ser.size)
+      }
+    }
+    def deserialize(buffer: ByteBuffer) = {
+      var remaining = n
+      val builder = cbf()
+      while (remaining > 0) {
+        val indicator = buffer.get()
+        indicator match {
+          case 1 =>
+            builder += ser.deserialize(buffer)
+            remaining -= 1
+          case 0 =>
+            buffer.position(buffer.position + remaining * (1 + ser.size) - 1)
+            remaining = 0
+        }
+      }
+      builder.result()
     }
   }
 

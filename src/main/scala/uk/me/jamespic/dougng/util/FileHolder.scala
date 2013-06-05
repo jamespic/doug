@@ -13,7 +13,10 @@ private[util] class FileHolder(initialWindow: Long) extends Hibernatable {
   var file: File = tryAndMaybeGc(File.createTempFile("data", ".dat"))
   var raf: RandomAccessFile = tryAndMaybeGc(new RandomAccessFile(file, "rw"))
   var channel: FileChannel = raf.getChannel()
-  var currentMap: MappedByteBuffer = channel.map(READ_WRITE, 0L, initialWindow)
+  var currentMap: MappedByteBuffer =
+    if(initialWindow > 0) {
+      channel.map(READ_WRITE, 0L, initialWindow)
+    } else null
   var hibernating = false
 
   file.deleteOnExit()
