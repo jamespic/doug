@@ -65,13 +65,16 @@ object MapReduceDigitalTrie {
 class MapReduceDigitalTrie[V, S]
     (map: V => S, reduce: Traversable[S] => Option[S])
     (alloc: Allocator)
-    (implicit sers: Serializer[S]) extends Hibernatable {
+    (implicit sers: Serializer[S], serv: Serializer[V]) extends Hibernatable {
   import MapReduceDigitalTrie._
 
   override def sync[B](f: => B) = alloc.sync(f)
   def hibernate() = alloc.hibernate()
 
-  private case class Pointer(typ: Byte, loc: alloc.HandleType) {
+  private trait TaggedValue {def interesting: Boolean}
+  private object Interesting {def unapply(t: TaggedValue) = if (t.interesting) Some(t) else None}
+
+  private case class Pointer(typ: Byte, loc: alloc.HandleType) extends TaggedValue {
     def apply(): Node = typ match {
       case 0 => new EmptyBranchNode
       case 1 => new SingleBranchNode(alloc.storage(loc)(SingleNode.branchSerializer))
@@ -83,6 +86,25 @@ class MapReduceDigitalTrie[V, S]
       case 7 => new MultiLeafNode(alloc.storage(loc)(MultiNode.leafSerializer))
       case 8 => ??? // HashBucketLeafNode
       case 9 => new FullLeafNode(alloc.storage(loc)(FullNode.leafSerializer))
+    }
+
+    def interesting = (typ != 0.toByte) && (typ != 5.toByte)
+  }
+
+  private case class LList[X: Serializer](interesting: Boolean, x: X, rest: alloc.HandleType) extends TaggedValue with Traversable[X] {
+    override def foreach[U](f: X => U) = {
+      var current: LList[X] = this
+      while (current.interesting) {
+        f(current.x)
+        current = alloc.storage(current.rest)(LList.serializer[X]).read[LList[X]](0)
+      }
+    }
+  }
+
+  private object LList {
+    implicit val handleSerializer = alloc.handleSerializer
+    implicit def serializer[X: Serializer] = {
+      Serializer.caseClassSerializer(LList.apply[X] _, LList.unapply[X] _)
     }
   }
 
@@ -146,7 +168,7 @@ class MapReduceDigitalTrie[V, S]
     implicit def serializer[X: Serializer] =
       implicitly[Serializer[(Option[S], UByte, X)]]
     val branchSerializer = serializer[Pointer]
-    val leafSerializer = serializer[S]
+    val leafSerializer = serializer[LList[S]]
   }
 
   private abstract class SingleNode[X: Serializer](typ: Byte, storage: alloc.Storage)
@@ -196,9 +218,10 @@ class MapReduceDigitalTrie[V, S]
     implicit def serializer[X: Serializer] =
       new Serializer.VariableCollectionSerializer[(UByte, X), IndexedSeq[(UByte, X)]](MultiNodeSize)
     val branchSerializer = serializer[Pointer]
-    val leafSerializer = serializer[S]
+    val leafSerializer = serializer[LList[S]]
   }
 
+  //TODO: Figure out if we can refactor this to take advantage of TaggedValue
   private abstract class MultiNode[X: Serializer](typ: Byte, storage: alloc.Storage)
       extends WithStorage[X](typ, storage) {
     import MultiNode._
@@ -260,7 +283,9 @@ class MapReduceDigitalTrie[V, S]
 
   }
 
-  private abstract class HashBucketNode[X: Serializer](typ: Byte, storage: alloc.Storage)
+
+  //TODO: Implement this
+  private abstract class HashBucketNode[X <: TaggedValue: Serializer](typ: Byte, storage: alloc.Storage)
       extends WithStorage[X](typ, storage) {
     def apply(idx: UByte) = ???
     override def foreach[U](f: ((UByte, X)) => U) = ???
@@ -271,31 +296,32 @@ class MapReduceDigitalTrie[V, S]
 
   private object FullNode {
     implicit def serializer[X: Serializer] =
-      new Serializer.FixedCollectionSerializer[Option[X], IndexedSeq[Option[X]]](FullNodeSize)
+      new Serializer.FixedCollectionSerializer[X, IndexedSeq[X]](FullNodeSize)
     val branchSerializer = serializer[Pointer]
-    val leafSerializer = serializer[S]
+    val leafSerializer = serializer[LList[S]]
   }
 
-  private abstract class FullNode[X: Serializer](typ: Byte, storage: alloc.Storage)
+  private abstract class FullNode[X <: TaggedValue : Serializer](typ: Byte, storage: alloc.Storage)
       extends WithStorage[X](typ, storage) {
     import FullNode._
-    type Ser = (Option[S], IndexedSeq[Option[X]])
-    type Rec = Option[X]
+    type Ser = (Option[S], IndexedSeq[X])
+    type Rec = X
     private implicit val ser = serializer[X]
 
     def apply(idx: UByte) = {
-      storage.read[Option[X]](sizeof[Option[S]] + idx * sizeof[Rec])
+      val x = storage.read[X](sizeof[Option[S]] + idx * sizeof[Rec])
+      if (x.interesting) Some(x) else None
     }
 
     override def foreach[U](f: ((UByte, X)) => U) = {
       val records = storage.read(sizeof[Option[S]])(ser).zipWithIndex
-      for ((Some(x), i) <- records) f((UByte(i.toByte), x))
+      for ((x, i) <- records; if x.interesting) f((UByte(i.toByte), x))
     }
 
     protected def getOrElseInsert(idx: UByte, orElse: => X) = {
       val ret = apply(idx) getOrElse {
         val x = orElse
-        storage.write[Option[X]](sizeof[Option[S]] + idx * sizeof[Rec], Some(x))
+        storage.write[X](sizeof[Option[S]] + idx * sizeof[Rec], x)
         x
       }
       (None, ret)
@@ -306,13 +332,13 @@ class MapReduceDigitalTrie[V, S]
         case Some(x) => present(x)
         case None => absent
       }
-      storage.write[Option[X]](sizeof[Option[S]] + idx * sizeof[Rec], Some(newX))
+      storage.write[X](sizeof[Option[S]] + idx * sizeof[Rec], newX)
       (None, newX)
     }
 
     protected def bulkLoad(entries: Traversable[(UByte, X)]) = {
       for ((i, x) <- entries) {
-        storage.write[Option[X]](sizeof[Option[S]] + i * sizeof[Rec], Some(x))
+        storage.write[X](sizeof[Option[S]] + i * sizeof[Rec], x)
       }
       ???
     }
@@ -324,7 +350,7 @@ class MapReduceDigitalTrie[V, S]
    * Semantic types
    */
 
-  private trait LeafNode extends BaseNode[S] {
+  private trait LeafNode extends BaseNode[LList[V]] {
     type SemanticType = LeafNode
   }
 
@@ -376,41 +402,41 @@ class MapReduceDigitalTrie[V, S]
     }
   }
 
-  private class EmptyLeafNode extends EmptyNode[S](5) with LeafNode {
-    def upgrade(entries: Traversable[(UByte, S)]) = {
+  private class EmptyLeafNode extends EmptyNode[LList[V]](5) with LeafNode {
+    def upgrade(entries: Traversable[(UByte, LList[V])]) = {
       new SingleLeafNode(entries)
     }
   }
 
   private class SingleLeafNode(storage: alloc.Storage)
-      extends SingleNode[S](6, storage) with LeafNode {
-    def this(entries: Traversable[(UByte, S)]) {
+      extends SingleNode[LList[V]](6, storage) with LeafNode {
+    def this(entries: Traversable[(UByte, LList[V])]) {
       this(alloc(SingleNode.leafSerializer))
       bulkLoad(entries)
     }
-    def upgrade(entries: Traversable[(UByte, S)]) = {
+    def upgrade(entries: Traversable[(UByte, LList[V])]) = {
       new MultiLeafNode(entries)
     }
   }
 
   private class MultiLeafNode(storage: alloc.Storage)
-      extends MultiNode[S](7, storage) with LeafNode {
-    def this(entries: Traversable[(UByte, S)]) {
-      this(alloc(MultiNode.serializer))
+      extends MultiNode[LList[V]](7, storage) with LeafNode {
+    def this(entries: Traversable[(UByte, LList[V])]) {
+      this(alloc(MultiNode.leafSerializer))
       bulkLoad(entries)
     }
-    def upgrade(entries: Traversable[(UByte, S)]) = ???
+    def upgrade(entries: Traversable[(UByte, LList[V])]) = ???
   }
 
   private class HashBucketLeafNode(storage: alloc.Storage)
-      extends HashBucketNode[S](8, storage) with LeafNode {
-    def upgrade(entries: Traversable[(UByte, S)]) = ???
+      extends HashBucketNode[LList[V]](8, storage) with LeafNode {
+    def upgrade(entries: Traversable[(UByte, LList[V])]) = ???
   }
 
   private class FullLeafNode(storage: alloc.Storage)
-      extends FullNode[S](9, storage) with LeafNode {
-    def this(entries: Traversable[(UByte, S)]) {
-      this(alloc(FullNode.serializer))
+      extends FullNode[LList[V]](9, storage) with LeafNode {
+    def this(entries: Traversable[(UByte, LList[V])]) {
+      this(alloc(FullNode.leafSerializer))
       bulkLoad(entries)
     }
   }

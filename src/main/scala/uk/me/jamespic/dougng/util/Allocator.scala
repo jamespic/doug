@@ -14,8 +14,6 @@ trait Allocator extends Hibernatable {
     def handle: HandleType
     def write[A](off: Int, value: A)(implicit ser: Serializer[A]): Unit
     def read[A](off: Int)(implicit ser:Serializer[A]): A
-    //def write[A](value: A)(implicit ser: Serializer[A]): Unit = write(0, value)(ser)
-    //def read[A](implicit ser: Serializer[A]): A = read(0)(ser)
     def free: Unit
   }
 }

@@ -52,6 +52,12 @@ object Serializer extends LowPriorityImplicits {
     def deserialize(buffer: ByteBuffer) = buffer.get()
   }
 
+  implicit object BooleanSerializer extends Serializer[Boolean] {
+    val size = 1
+    def serialize(value: Boolean, buffer: ByteBuffer) = buffer put (if (value) 1 else 0).toByte
+    def deserialize(buffer: ByteBuffer) = buffer.get != 0
+  }
+
   object NoneSerializer extends Serializer[None.type] {
     val size = 0
     def serialize(value: None.type, buffer: ByteBuffer) = ()
