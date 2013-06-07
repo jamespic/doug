@@ -39,6 +39,11 @@ object MapReduceDigitalTrie {
   implicit def long2ByteOrdered(l: Long) = new ByteOrderedLong(l - Long.MinValue)
   implicit def byteOrdered2Long(bo: ByteOrderedLong) = bo.toLong
 
+  implicit def bytes2ByteOrderedLong(bytes: List[UByte]) = {
+    val boLong = (bytes :\ 0L){(byte, l) => (l << 8) | byte.toShort }
+    new ByteOrderedLong(boLong)
+  }
+
   case class UByte(val by: Byte) extends AnyVal {
     def toShort = if (by >= 0) by.toShort else (by.toShort + 0x100).toShort
     def +(i: Int) = i + toShort
@@ -77,17 +82,20 @@ object MapReduceDigitalTrie {
 class MapReduceDigitalTrie[V, S]
     (mapReduce: Traversable[V] => Option[S], rereduce: Traversable[S] => Option[S])
     (alloc: Allocator)
-    (implicit sers: Serializer[S], serv: Serializer[V]) extends Hibernatable {
+    (implicit sers: Serializer[S], serv: Serializer[V])
+    extends Hibernatable
+    with Traversable[(Long, V)] {
   import MapReduceDigitalTrie._
 
   private var rootNode = TaggedPointer((new EmptyBranchNode).pointer, false)
+  //Invalidate this when calculating summaries
   private var lastInsertion: Option[SearchState] = None
 
   def +=(e: (Long, V)) = sync {
     val (k, v) = e
     lastInsertion match {
       case Some(SearchState(level, address, pointer))
-           if k.matchAtLevel(level, address) && pointer().summary.isEmpty =>
+           if k.matchAtLevel(level, address) =>
         insert(SearchState(level, k, pointer), v)
       case _ =>
         lastInsertion = None
@@ -97,6 +105,22 @@ class MapReduceDigitalTrie[V, S]
         }
     }
     ()
+  }
+
+  override def foreach[U](f: ((Long, V)) => U) = sync {
+    def rec(address: List[UByte], node: Node): Unit = {
+      node match {
+        case branch: BranchNode =>
+          for ((idx, ptr) <- branch) {
+            rec(idx :: address, ptr())
+          }
+        case leaf: LeafNode =>
+          for ((idx, vlist) <- leaf; k = (idx :: address).toLong; v <- vlist) {
+            f(k -> v)
+          }
+      }
+    }
+    rec(Nil, rootNode())
   }
 
   def prettyPrint: String = sync {
@@ -174,6 +198,7 @@ class MapReduceDigitalTrie[V, S]
 
   override def sync[B](f: => B) = alloc.sync(f)
   def hibernate() = alloc.hibernate()
+  def close() = alloc.close
 
   private case class SearchState(level: Int, address: ByteOrderedLong, pointer: TaggedPointer)
 
