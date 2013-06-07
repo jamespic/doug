@@ -4,6 +4,7 @@ import java.nio.ByteBuffer
 
 object ChannelAllocator {
   private val ZeroCount = 4096
+  private val InternalBufferSize = 8192
 }
 
 class ChannelAllocator extends Allocator {
@@ -13,6 +14,7 @@ class ChannelAllocator extends Allocator {
   private val file = new FileHolder(0)
   private var freeList = Map.empty[Int, List[Long]]
   private var limit = 0L
+  private val buf = ByteBuffer.allocate(ChannelAllocator.InternalBufferSize)
   override def sync[B](f: => B) = file.sync(f)
   def hibernate() = file.hibernate()
 
@@ -87,19 +89,29 @@ class ChannelAllocator extends Allocator {
       this
     }
 
+    private def buffer(size: Int) = {
+      if (size <= ChannelAllocator.InternalBufferSize) {
+        buf.clear()
+        buf.limit(size)
+        buf
+      } else {
+        ByteBuffer.allocate(size)
+      }
+    }
+
     def write[A](off: Int, value: A)(implicit ser: Serializer[A]): Unit = sync {
       checkValid
       checkBounds(off, ser.size)
-      val buf = ByteBuffer.allocate(ser.size)
-      ser.serialize(value, buf)
-      buf.rewind()
-      file.channel.write(buf, start + off)
+      val buff = buffer(ser.size)
+      ser.serialize(value, buff)
+      buff.rewind()
+      file.channel.write(buff, start + off)
     }
 
     def read[A](off: Int)(implicit ser: Serializer[A]): A = sync {
       checkValid
       checkBounds(off, ser.size)
-      val buf = ByteBuffer.allocate(ser.size)
+      val buf = buffer(ser.size)
       file.channel.read(buf, start + off)
       buf.rewind()
       ser.deserialize(buf)
