@@ -284,6 +284,7 @@ class MapReduceDigitalTrie[V, S]
     def apply(idx: UByte): Option[X]
     //def getOrElseInsert(idx: UByte, absent: => X, present: X => Unit): Option[Pointer]
     def visit(idx: UByte, absent: => Option[X], present: X => Option[X]): Option[Pointer]
+    def visitAll(f: ((UByte, X)) => Option[X]): Unit
     protected def upgrade(entries: Traversable[(UByte, X)]): SemanticType
     protected def upgradeAndLoad(extraIndex: UByte, extraVal: => X) = {
       var newNode = upgrade(this ++ Seq((extraIndex, extraVal)))
@@ -315,6 +316,7 @@ class MapReduceDigitalTrie[V, S]
     def apply(idx: UByte) = None
     override def foreach[U](f: ((UByte, X)) => U) = ()
     def visit(idx: UByte, absent: => Option[X], present: X => Option[X]) = absent flatMap (newX => upgradeAndLoad(idx, newX))
+    def visitAll(f: ((UByte, X)) => Option[X]) = ()
   }
 
   private trait MetaData[NodeType[_ <: TaggedValue] <: WithStorage[_]] {
@@ -358,6 +360,13 @@ class MapReduceDigitalTrie[V, S]
         None
       } else {
         absent flatMap (newX => upgradeAndLoad(idx, newX))
+      }
+    }
+
+    def visitAll(f: ((UByte, X)) => Option[X]) = {
+      f(data) match {
+        case Some(x) => storage.write(sizeof[Option[S]] + sizeof[Byte], x)
+        case None => // Do nothing
       }
     }
 
@@ -410,15 +419,30 @@ class MapReduceDigitalTrie[V, S]
       }
     }
 
+    def visitAll(f: ((UByte, X)) => Option[X]) = {
+      for (((idx, x), pos) <- data.zipWithIndex) {
+        f((idx, x)) match {
+          case Some(newX) =>
+            writeTo(pos, idx, newX)
+          case None =>
+            // Do nothing
+        }
+      }
+    }
+
     private def addToEnd(idx: UByte, x: X) = {
       val currentSize = data.size
       if (currentSize >= MultiNodeSize) {
         upgradeAndLoad(idx, x)
       } else {
-        storage.write(sizeof[Option[S]] + currentSize * sizeof[Rec], (1.toByte, idx, x))
+        writeTo(currentSize, idx, x)
         dataOpt = dataOpt map (l => l :+ (idx, x))
         None
       }
+    }
+
+    private def writeTo(loc: Int, idx: UByte, x: X) = {
+      storage.write(sizeof[Option[S]] + loc * sizeof[Rec], (1.toByte, idx, x))
     }
 
     protected def bulkLoad(entries: Traversable[(UByte, X)]) = {
@@ -454,10 +478,13 @@ class MapReduceDigitalTrie[V, S]
     import Implicits._
     type Bucket = IndexedSeq[(UByte, X)]
     type Ser = (Option[S], IndexedSeq[Bucket])
-    private def bucket(idx: UByte) = {
+    private def bucket(idx: UByte): (Int, Bucket) = {
       val h = hash(idx)
-      val data = storage.read[Bucket](sizeof[Option[S]] + h * sizeof[Bucket])
+      val data = bucket(h)
       (h, data)
+    }
+    private def bucket(h: Int): Bucket = {
+      storage.read[Bucket](sizeof[Option[S]] + h * sizeof[Bucket])
     }
     def apply(idx: UByte) = {
       val (h, data) = bucket(idx)
@@ -479,6 +506,18 @@ class MapReduceDigitalTrie[V, S]
             writeToPos(h, p, (idx, newX))
           }
           None
+      }
+    }
+
+    def visitAll(f: ((UByte, X)) => Option[X]) = {
+      for {
+        h <- 0 to 3
+        ((idx, x), pos) <- bucket(h).zipWithIndex
+      } {
+        f((idx, x)) match {
+          case Some(newX) => writeToPos(h, pos, (idx, newX))
+          case None => // Do nothing
+        }
       }
     }
 
@@ -536,14 +575,27 @@ class MapReduceDigitalTrie[V, S]
         case None => absent
       }
       for (newX <- newXOpt) {
-        storage.write[X](sizeof[Option[S]] + idx * sizeof[Rec], newX)
+        write(idx, newX)
       }
       None
     }
 
+    def visitAll(f: ((UByte, X)) => Option[X]) = {
+      for ((idx, x) <- this) {
+        f((idx, x)) match {
+          case Some(newX) => write(idx, x)
+          case None => // Do nothing
+        }
+      }
+    }
+
+    private def write(i: UByte, x: X) = {
+      storage.write[X](sizeof[Option[S]] + i * sizeof[Rec], x)
+    }
+
     protected def bulkLoad(entries: Traversable[(UByte, X)]) = {
       for ((i, x) <- entries) {
-        storage.write[X](sizeof[Option[S]] + i * sizeof[Rec], x)
+        write(i, x)
       }
     }
     protected def upgrade(entries: Traversable[(UByte, X)]) =
@@ -556,29 +608,10 @@ class MapReduceDigitalTrie[V, S]
 
   private trait LeafNode extends BaseNode[LList[V]] {
     type SemanticType = LeafNode
-    //abstract override def summary = {
-    //  super.summary match {
-    //    case Some(s) => Some(s)
-    //    case None =>
-    //      val values = this flatMap (_._2)
-    //      val s = mapReduce(values)
-    //      summary = s
-    //      s
-    //  }
-    //}
   }
 
   private trait BranchNode extends BaseNode[TaggedPointer] {
     type SemanticType = BranchNode
-    //abstract override def summary = {
-    //  super.summary match {
-    //    case Some(s) => Some(s)
-    //    case None =>
-    //      val s = rereduce(this flatMap {case (i, p) => p().summary})
-    //      summary = s
-    //      s
-    //  }
-    //}
   }
 
   /*
