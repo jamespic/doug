@@ -27,12 +27,22 @@ object MapReduceDigitalTrie {
 
     def bytes = for (i <- 0 to 7) yield getByte(i.toByte)
 
+    def mask(level: Int) = (-1L) << (level * 8)
+
     def matchAtLevel(level: Int, o: ByteOrderedLong) = {
       if (level > 7) true
       else {
-        val mask = (-1L) << (level * 8)
-        ((ol ^ o.ol) & mask) == 0
+        ((ol ^ o.ol) & mask(level)) == 0
       }
+    }
+
+    def minAtLevel(level: Int) = {
+      new ByteOrderedLong(ol & mask(level))
+    }
+
+    def maxAtLevel(level: Int) = {
+      val m = mask(level)
+      new ByteOrderedLong((ol & m) | ~m)
     }
   }
 
@@ -107,6 +117,10 @@ class MapReduceDigitalTrie[V, S]
     ()
   }
 
+  def ++=(list: Traversable[(Long, V)]) = sync {
+    for (e <- list) this += e
+  }
+
   override def foreach[U](f: ((Long, V)) => U) = sync {
     def rec(address: List[UByte], node: Node): Unit = {
       node match {
@@ -125,6 +139,59 @@ class MapReduceDigitalTrie[V, S]
 
   def prettyPrint: String = sync {
     prettyPrint(0, UByte(0.toByte), rootNode()).mkString("\n")
+  }
+
+  def get(k: Long) = sync {
+    getRec(SearchState(7, k, rootNode))
+  }
+
+  private def getRec(state: SearchState): Traversable[V] = {
+    val SearchState(level, address, pointer) = state
+    val node = pointer()
+    val idx = address.getByte(level)
+    node match {
+      case branch: BranchNode =>
+        val nextPtr = branch(idx)
+        nextPtr match {
+          case Some(ptr) => getRec(SearchState(level - 1, address, ptr))
+          case None => Traversable.empty[V]
+        }
+      case leaf: LeafNode =>
+        leaf(idx) match {
+          case Some(llist) => llist
+          case None => Traversable.empty[V]
+        }
+    }
+  }
+
+  def getBetween(low: Long, high: Long): Traversable[V] = sync {
+    require(low <= high)
+    getBetween(low.bytes.reverse, high.bytes.reverse, rootNode())
+  }
+
+  private def getBetween(lowRoute: Seq[UByte], highRoute: Seq[UByte], node: Node): Traversable[V] = {
+    import Ordering.Implicits._
+    val lowHead +: lowTail = lowRoute
+    val highHead +: highTail = highRoute
+    val minTail = List.fill(lowTail.size)(UByte(0.toByte))
+    val maxTail = List.fill(lowTail.size)(UByte(255.toByte))
+    require(lowHead <= highHead)
+    node match {
+      case branch: BranchNode =>
+        for {
+          (idx, ptr) <- branch
+          if (lowHead <= idx) && (idx <= highHead)
+          newLow = if (idx == lowHead) lowTail else minTail
+          newHigh = if (idx == highHead) highTail else maxTail
+          v <- getBetween(newLow, newHigh, ptr())
+        } yield v
+      case leaf: LeafNode =>
+        for {
+          (idx, llist) <- leaf
+          if (lowHead <= idx) && (idx <= highHead)
+          v <- llist
+        } yield v
+    }
   }
 
   private def prettyPrint(depth: Int, idx: UByte, node: Node): Traversable[String] = {
@@ -196,6 +263,99 @@ class MapReduceDigitalTrie[V, S]
     }
   }
 
+  def summaryBetween(low: Long, high: Long): Option[S] = sync {
+    summaryBetween(low.bytes.reverse, high.bytes.reverse, rootNode())
+  }
+
+  private def summaryBetween(lowRoute: Seq[UByte], highRoute: Seq[UByte], node: Node): Option[S] = {
+    import Ordering.Implicits._
+    val lowHead +: lowTail = lowRoute
+    val highHead +: highTail = highRoute
+    val minTail = List.fill(lowTail.size)(UByte(0.toByte))
+    val maxTail = List.fill(lowTail.size)(UByte(255.toByte))
+    require(lowHead <= highHead)
+    node match {
+      case branch: BranchNode if lowHead == highHead =>
+        branch(lowHead) flatMap {ptr => summaryBetween(lowTail, highTail, ptr())}
+      case branch: BranchNode =>
+        val summaries = Seq.newBuilder[S]
+        branch visitAll {case (idx, ptr) =>
+          idx match {
+            case i if i == lowHead =>
+              summaries ++= summaryBetween(lowTail, maxTail, ptr())
+              None
+            case i if i == highHead =>
+              summaries ++= summaryBetween(minTail, highTail, ptr())
+              None
+            case i if lowHead < i && i < highHead =>
+              val (sumOpt, ptrOpt) = summarizePointer(ptr)
+              summaries ++= sumOpt
+              ptrOpt
+            case _ => None
+          }
+
+        }
+        rereduce(summaries.result())
+      case leaf: LeafNode =>
+        val values = for {
+          (idx, llist) <- leaf
+          if (lowHead <= idx) && (idx <= highHead)
+          v <- llist
+        } yield v
+        mapReduce(values)
+    }
+  }
+
+  def summary = sync {
+    val (s, ptr) = summarizePointer(rootNode)
+    ptr foreach (ptr => rootNode = ptr)
+    s
+  }
+
+  private def summarizePointer(pointer: TaggedPointer): (Option[S], Option[TaggedPointer]) = {
+    val node = pointer()
+    if (pointer.hasSummary) (node.summary, None)
+    else (node.regenerateSummary,Some(TaggedPointer(pointer.pointer, true)))
+  }
+
+  def minKey = sync {
+    minKeyRec(Nil, rootNode())
+  }
+
+  private def minKeyRec(bytes: List[UByte], node: Node): Option[Long] = {
+    node match {
+      case branch: BranchNode =>
+        branch.headOption match {
+          case Some((idx, ptr)) =>
+            minKeyRec(idx :: bytes, ptr())
+          case None =>
+            None
+        }
+      case leaf: LeafNode =>
+        leaf.headOption map {case (idx, l) => (idx :: bytes).toLong}
+    }
+  }
+
+  def maxKey = sync {
+    maxKeyRec(Nil, rootNode())
+  }
+
+  private def maxKeyRec(bytes: List[UByte], node: Node): Option[Long] = {
+    node match {
+      case branch: BranchNode =>
+        branch.lastOption match {
+          case Some((idx, ptr)) =>
+            maxKeyRec(idx :: bytes, ptr())
+          case None =>
+            None
+        }
+      case leaf: LeafNode =>
+        leaf.lastOption map {case (idx, l) => (idx :: bytes).toLong}
+    }
+  }
+
+
+
   override def sync[B](f: => B) = alloc.sync(f)
   def hibernate() = alloc.hibernate()
   def close() = alloc.close
@@ -237,7 +397,7 @@ class MapReduceDigitalTrie[V, S]
   }
 
   private case class LList[X: Serializer](typ: Byte, x: X, rest: alloc.HandleType) extends TaggedValue with Traversable[X] {
-    override def foreach[U](f: X => U) = {
+    override def foreach[U](f: X => U) = sync {
       LList.foreach(this, f)
     }
 
@@ -272,6 +432,7 @@ class MapReduceDigitalTrie[V, S]
   private trait Node {
     val pointer: Pointer
     def summary: Option[S]
+    def regenerateSummary: Option[S]
     def invalidate(): Unit
   }
 
@@ -298,7 +459,10 @@ class MapReduceDigitalTrie[V, S]
     val pointer = Pointer(typ, storage.handle)
     // WithStorage subclasses must store their summaries as the first element of their storage
     def summary = storage.read[Option[S]](0)
-    protected override def summary_=(s: Option[S]) = storage.write(0, s)
+    protected override def summary_=(s: Option[S]) = {
+      lastInsertion = None
+      storage.write(0, s)
+    }
     def invalidate() = {summary = None}
     override def upgradeAndLoad(idx: UByte, extraVal: => X) = {
       val ret = super.upgradeAndLoad(idx, extraVal)
@@ -608,10 +772,33 @@ class MapReduceDigitalTrie[V, S]
 
   private trait LeafNode extends BaseNode[LList[V]] {
     type SemanticType = LeafNode
+    def regenerateSummary = {
+      val values = for {(idx,vlist) <- this
+                        v <- vlist} yield v
+      val s = mapReduce(values)
+      summary = s
+      s
+    }
   }
 
   private trait BranchNode extends BaseNode[TaggedPointer] {
     type SemanticType = BranchNode
+    def regenerateSummary = {
+      val subSummaries = new Traversable[S] {
+        def foreach[U](f: S => U): Unit = {
+          visitAll {case (idx, x) =>
+            val (sOpt, ptrOpt) = summarizePointer(x)
+            sOpt foreach f
+            ptrOpt
+          }
+        }
+        // Overriding for efficiency
+        override def isEmpty = this.isInstanceOf[EmptyNode[_]]
+      }
+      val s = rereduce(subSummaries)
+      summary = s
+      s
+    }
   }
 
   /*
@@ -712,5 +899,4 @@ class MapReduceDigitalTrie[V, S]
       bulkLoad(entries)
     }
   }
-
 }
