@@ -138,7 +138,7 @@ class MapReduceDigitalTrie[V, S]
   }
 
   def prettyPrint: String = sync {
-    prettyPrint(0, UByte(0.toByte), rootNode()).mkString("\n")
+    prettyPrint(0, UByte(0.toByte), rootNode).mkString("\n")
   }
 
   def get(k: Long) = sync {
@@ -194,12 +194,13 @@ class MapReduceDigitalTrie[V, S]
     }
   }
 
-  private def prettyPrint(depth: Int, idx: UByte, node: Node): Traversable[String] = {
-    val head = Traversable(s"${"|" * depth}+ [$idx] ${node.getClass.getSimpleName} - Summary: ${node.summary}")
+  private def prettyPrint(depth: Int, idx: UByte, pointer: TaggedPointer): Traversable[String] = {
+    val node = pointer()
+    val head = Traversable(s"${"|" * depth}+ [$idx] ${node.getClass.getSimpleName} - HasSummary: ${pointer.hasSummary}, Summary: ${node.summary}")
     val tail = node match {
       case branch: BranchNode =>
         branch flatMap {case (subIdx, ptr) =>
-          prettyPrint(depth + 1, subIdx, ptr())
+          prettyPrint(depth + 1, subIdx, ptr)
         }
       case leaf: LeafNode =>
         for ((subIdx, vlist) <- leaf; v <- vlist) yield {
@@ -529,7 +530,9 @@ class MapReduceDigitalTrie[V, S]
 
     def visitAll(f: ((UByte, X)) => Option[X]) = {
       f(data) match {
-        case Some(x) => storage.write(sizeof[Option[S]] + sizeof[Byte], x)
+        case Some(x) =>
+          storage.write(sizeof[Option[S]] + sizeof[UByte], x)
+          dataOpt = Some((index, x))
         case None => // Do nothing
       }
     }
@@ -747,7 +750,8 @@ class MapReduceDigitalTrie[V, S]
     def visitAll(f: ((UByte, X)) => Option[X]) = {
       for ((idx, x) <- this) {
         f((idx, x)) match {
-          case Some(newX) => write(idx, x)
+          case Some(newX) =>
+            write(idx, newX)
           case None => // Do nothing
         }
       }

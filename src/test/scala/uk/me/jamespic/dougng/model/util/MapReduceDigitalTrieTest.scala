@@ -34,9 +34,9 @@ class MapReduceDigitalTrieTest extends FunSpec with ShouldMatchers with GivenWhe
 	    it("should be constructible with 180 items in different buckets") {
 	      testConstructPaired(0L to 23040L by 128)
 	    }
-	    it("should be constructible with 20000 random items") {
+	    it("should be constructible with 100000 random items") {
 	      val random = new java.util.Random(0)
-	      testConstructPaired(Traversable.fill(20000)(random.nextLong))
+	      testConstructPaired(Traversable.fill(100000)(random.nextLong))
 	    }
     }
 
@@ -71,10 +71,24 @@ class MapReduceDigitalTrieTest extends FunSpec with ShouldMatchers with GivenWhe
       }
     }
 
+    it("should not recalculate the same summaries") {
+      val alloc = new ChannelAllocator
+      val instance = new MapReduceDigitalTrie[Long, Long](sum _, sum _)(alloc)
+      for (i <- 0L to 5898240L by 65536L) {
+        instance += i -> i
+      }
+      val summary = instance.summary
+      println(s"Calculated summary: $summary")
+      instance.prettyPrint.contains("HasSummary: false") should be(false)
+      val sumBetween = instance.summaryBetween(100L, 999999999L)
+      println(s"Calculated summary between: $sumBetween")
+    }
+
     describe("Containing the numbers from 1 to 1000") {
       val alloc = new ChannelAllocator
       val instance = new MapReduceDigitalTrie[Long, Long](sum _, sum _)(alloc)
       instance ++= (for (i <- 1L to 1000L) yield i -> i)
+      instance.summary
 
       it("should have a minimum key of 1") {
         instance.minKey should equal(Some(1L))
@@ -127,14 +141,15 @@ class MapReduceDigitalTrieTest extends FunSpec with ShouldMatchers with GivenWhe
   }
 
   def testConstruct(source: Traversable[(Long, Long)]) = {
-    val alloc = new ChannelAllocator
+    val alloc = new MappedAllocator
+    //val alloc = new ChannelAllocator
     val instance = new MapReduceDigitalTrie[Long, Long](sum _, sum _)(alloc)
     time("Constructed") {
       for (i <- source) {
         instance += i
       }
     }
-    instance.toSet should equal(source.toSet)
+    require(instance.toSet == source.toSet)
     if (instance.size > 1) {
       instance.toSeq.sliding(2).forall {case Seq((k1, v1), (k2, v2)) => k1 <= k2} should be(true)
     }

@@ -1,5 +1,19 @@
 package uk.me.jamespic.dougng.util
 
+object Allocator {
+  private val MappedPlatforms = Set(("Linux","64"), ("Windows","64"))
+  def apply() = {
+    import scala.collection.JavaConversions._
+    (for (platform <- Option(System.getProperty("os.name"));
+         bits <- Option(System.getProperty("sun.arch.data.model"));
+         if MappedPlatforms contains (platform, bits)) yield {
+      new MappedAllocator
+    }) getOrElse {
+      new ChannelAllocator
+    }
+  }
+}
+
 trait Allocator extends Hibernatable {
   type HandleType
   implicit val handleSerializer: Serializer[HandleType]
