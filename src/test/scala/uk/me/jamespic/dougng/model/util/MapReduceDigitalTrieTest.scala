@@ -78,10 +78,10 @@ class MapReduceDigitalTrieTest extends FunSpec with ShouldMatchers with GivenWhe
         instance += i -> i
       }
       val summary = instance.summary
-      println(s"Calculated summary: $summary")
+      info(s"Calculated summary: $summary")
       instance.prettyPrint.contains("HasSummary: false") should be(false)
       val sumBetween = instance.summaryBetween(100L, 999999999L)
-      println(s"Calculated summary between: $sumBetween")
+      info(s"Calculated summary between: $sumBetween")
     }
 
     describe("Containing the numbers from 1 to 1000") {

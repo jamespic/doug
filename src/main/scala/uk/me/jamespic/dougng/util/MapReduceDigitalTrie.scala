@@ -19,7 +19,7 @@ object MapReduceDigitalTrie {
     /**
      * Get a given byte. Significance goes from 0 (least significant) to 7 (most significant)
      *
-     * Bytes are actually returned as Shorts, since Bytes are signed, and we want unsigned.
+     * Bytes are returned as UBytes, since Bytes are signed, and we want unsigned.
      */
     def getByte(sig: Int) = if (0 <= sig && sig <= 7) {
       UByte((ol >>> (sig * 8)).toByte)
@@ -50,29 +50,38 @@ object MapReduceDigitalTrie {
   implicit def byteOrdered2Long(bo: ByteOrderedLong) = bo.toLong
 
   implicit def bytes2ByteOrderedLong(bytes: List[UByte]) = {
-    val boLong = (bytes :\ 0L){(byte, l) => (l << 8) | byte.toShort }
+    val boLong = (bytes :\ 0L){(byte, l) => (l << 8) | byte.toLong }
     new ByteOrderedLong(boLong)
   }
 
   case class UByte(val by: Byte) extends AnyVal {
-    def toShort = if (by >= 0) by.toShort else (by.toShort + 0x100).toShort
-    def +(i: Int) = i + toShort
-    def +(l: Long) = l + toShort
-    def *(i: Int) = i * toShort
-    def *(l: Long) = l * toShort
-    override def toString = toShort.toString
+    def toInt: Int = if (by >= 0) by else (by + 0x100)
+    def toLong: Long = if (by >= 0) by else (by + 0x100L)
+    def +(i: Int) = i + toInt
+    def +(l: Long) = l + toLong
+    def *(i: Int) = i * toInt
+    def *(l: Long) = l * toLong
+    override def toString = toInt.toString
+  }
+
+  def bucketSort[A](items: Traversable[(UByte, A)]) = {
+    val array = new Array[(UByte, A)](FullNodeSize)
+    for (e <- items) {
+      array(e._1.toInt) = e
+    }
+    array withFilter (_ ne null)
   }
 
   implicit class IntOps(val i: Int) extends AnyVal {
-    def +(ub: UByte) = i + ub.toShort
-    def *(ub: UByte) = i * ub.toShort
-    def -(ub: UByte) = i - ub.toShort
+    def +(ub: UByte) = i + ub.toInt
+    def *(ub: UByte) = i * ub.toInt
+    def -(ub: UByte) = i - ub.toInt
   }
 
   implicit class LongOps(val l: Long) extends AnyVal {
-    def +(ub: UByte) = l + ub.toShort
-    def *(ub: UByte) = l * ub.toShort
-    def -(ub: UByte) = l - ub.toShort
+    def +(ub: UByte) = l + ub.toLong
+    def *(ub: UByte) = l * ub.toLong
+    def -(ub: UByte) = l - ub.toLong
   }
 
   object UByte {
@@ -80,7 +89,7 @@ object MapReduceDigitalTrie {
   }
 
   implicit object UByteOrdering extends Ordering[UByte] {
-    def compare(x: UByte, y: UByte) = x.toShort compare y.toShort
+    def compare(x: UByte, y: UByte) = x.toInt compare y.toInt
   }
 
   private val MultiNodeSize = 14
@@ -568,7 +577,7 @@ class MapReduceDigitalTrie[V, S]
     }
 
     def apply(idx: UByte) = data find {case (i, x) => idx == i } map (_._2)
-    override def foreach[U](f: ((UByte, X)) => U) = data.sortBy(_._1).foreach(f)
+    override def foreach[U](f: ((UByte, X)) => U) = bucketSort(data).foreach(f)
 
     def visit(idx: UByte, absent: => Option[X], present: X => Option[X]) = {
       val pos = data indexWhere {case (i, x) => i == idx}
@@ -659,7 +668,7 @@ class MapReduceDigitalTrie[V, S]
     }
     override def foreach[U](f: ((UByte, X)) => U) = {
       val buckets = storage.read[IndexedSeq[Bucket]](sizeof[Option[S]])
-      buckets.flatten.sortBy(_._1).foreach(f)
+      bucketSort(buckets.flatten).foreach(f)
     }
 
     def visit(idx: UByte, absent: => Option[X], present: X => Option[X]) = {
