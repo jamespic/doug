@@ -64,11 +64,15 @@ class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends
     }
   }
 
-  private def limit = blockSize.toLong * extents.size
+  private def limit = if (extents.isEmpty) {
+    0
+  } else {
+    blockSize * (extents.size - 1) + extents.last.allocated
+  }
 
   def fragmentation = sync {
     val freeSize = (freeList.map {case (size, list) => size.toLong * list.size.toLong}).sum
-    val wasteSize = (extents.map {e => blockSize - e.allocated}).sum
+    val wasteSize = (extents.dropRight(1).map {e => blockSize - e.allocated}).sum
     100.0f * (freeSize + wasteSize) / limit
   }
 
