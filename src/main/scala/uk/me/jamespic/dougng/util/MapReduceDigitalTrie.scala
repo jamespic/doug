@@ -106,7 +106,7 @@ class MapReduceDigitalTrie[V, S]
     with Traversable[(Long, V)] {
   import MapReduceDigitalTrie._
 
-  private var rootNode = TaggedPointer((new EmptyBranchNode).pointer, false)
+  private var rootNode = SummarizedPointer((new EmptyBranchNode).pointer, None)
   //Invalidate this when calculating summaries
   private var lastInsertion: Option[SearchState] = None
 
@@ -203,9 +203,9 @@ class MapReduceDigitalTrie[V, S]
     }
   }
 
-  private def prettyPrint(depth: Int, idx: UByte, pointer: TaggedPointer): Traversable[String] = {
+  private def prettyPrint(depth: Int, idx: UByte, pointer: SummarizedPointer): Traversable[String] = {
     val node = pointer()
-    val head = Traversable(s"${"|" * depth}+ [$idx] ${node.getClass.getSimpleName} - HasSummary: ${pointer.hasSummary}, Summary: ${node.summary}")
+    val head = Traversable(s"${"|" * depth}+ [$idx] ${node.getClass.getSimpleName} - Summary: ${pointer.summary}")
     val tail = node match {
       case branch: BranchNode =>
         branch flatMap {case (subIdx, ptr) =>
@@ -219,7 +219,7 @@ class MapReduceDigitalTrie[V, S]
     head ++ tail
   }
 
-  private def insert(state: SearchState, value: V): Option[TaggedPointer] = {
+  private def insert(state: SearchState, value: V): Option[SummarizedPointer] = {
     val SearchState(level, address, pointer) = state
     val node = pointer()
     val idx = address.getByte(level)
@@ -248,27 +248,24 @@ class MapReduceDigitalTrie[V, S]
     }
     newPtrOpt match {
       case Some(newPtr) =>
-        // Assume new pointers have no summaries, alternatively, uncomment next line
-        Some(TaggedPointer(newPtr, newPtr().summary.isDefined))
-        //Some(TaggedPointer(newPtr, false))
-      case None if pointer.hasSummary =>
-        node.invalidate()
-        Some(TaggedPointer(pointer.pointer, false))
+        Some(SummarizedPointer(newPtr, None))
+      case None if pointer.summary.isDefined =>
+        Some(SummarizedPointer(pointer.pointer, None))
       case _ => None
     }
   }
 
-  private def generateTower(level: Int, address: ByteOrderedLong, value: V): TaggedPointer = {
+  private def generateTower(level: Int, address: ByteOrderedLong, value: V): SummarizedPointer = {
     level match {
       case 0 =>
-        TaggedPointer(
+        SummarizedPointer(
             new SingleLeafNode(Seq(address.getByte(0) -> LList(LList.NoNextTyp, value, alloc.nullHandle))).pointer,
-            false
+            None
          )
       case i if i > 0 =>
-        TaggedPointer(
+        SummarizedPointer(
           new SingleBranchNode(Seq(address.getByte(level) -> generateTower(level - 1, address, value))).pointer,
-          false
+          None
         )
     }
   }
@@ -322,10 +319,13 @@ class MapReduceDigitalTrie[V, S]
     s
   }
 
-  private def summarizePointer(pointer: TaggedPointer): (Option[S], Option[TaggedPointer]) = {
-    val node = pointer()
-    if (pointer.hasSummary) (node.summary, None)
-    else (node.regenerateSummary,Some(TaggedPointer(pointer.pointer, true)))
+  private def summarizePointer(pointer: SummarizedPointer): (Option[S], Option[SummarizedPointer]) = {
+    pointer.summary match {
+      case None =>
+      	val summary = pointer().generateSummary
+      	(summary, Some(SummarizedPointer(pointer.pointer, summary)))
+      case Some(summary) => (Some(summary), None)
+    }
   }
 
   def minKey = sync {
@@ -370,7 +370,7 @@ class MapReduceDigitalTrie[V, S]
   def hibernate() = alloc.hibernate()
   def close() = alloc.close
 
-  private case class SearchState(level: Int, address: ByteOrderedLong, pointer: TaggedPointer)
+  private case class SearchState(level: Int, address: ByteOrderedLong, pointer: SummarizedPointer)
 
   private trait TaggedValue {def interesting: Boolean}
   private object Interesting {def unapply(t: TaggedValue) = if (t.interesting) Some(t) else None}
@@ -397,13 +397,13 @@ class MapReduceDigitalTrie[V, S]
     implicit val pointerSerializer = Serializer.caseClassSerializer(Pointer.apply _, Pointer.unapply _)
   }
 
-  private case class TaggedPointer(pointer: Pointer, hasSummary: Boolean) extends TaggedValue {
+  private case class SummarizedPointer(pointer: Pointer, summary: Option[S]) extends TaggedValue {
     def apply() = pointer.apply()
     def interesting = pointer.interesting
   }
 
-  private object TaggedPointer {
-    implicit val serializer = Serializer.caseClassSerializer(TaggedPointer.apply _, TaggedPointer.unapply _)
+  private object SummarizedPointer {
+    implicit val serializer = Serializer.caseClassSerializer(SummarizedPointer.apply _, SummarizedPointer.unapply _)
   }
 
   private case class LList[X: Serializer](typ: Byte, x: X, rest: alloc.HandleType) extends TaggedValue with Traversable[X] {
@@ -441,9 +441,7 @@ class MapReduceDigitalTrie[V, S]
    */
   private trait Node {
     val pointer: Pointer
-    def summary: Option[S]
-    def regenerateSummary: Option[S]
-    def invalidate(): Unit
+    def generateSummary: Option[S]
   }
 
   /*
@@ -451,7 +449,6 @@ class MapReduceDigitalTrie[V, S]
    */
   private abstract class BaseNode[X <: TaggedValue : Serializer](val typ: Byte) extends Traversable[(UByte, X)] with Node {
     type SemanticType <: BaseNode[X]
-    protected def summary_=(s: Option[S])
     def apply(idx: UByte): Option[X]
     //def getOrElseInsert(idx: UByte, absent: => X, present: X => Unit): Option[Pointer]
     def visit(idx: UByte, absent: => Option[X], present: X => Option[X]): Option[Pointer]
@@ -467,13 +464,6 @@ class MapReduceDigitalTrie[V, S]
       extends BaseNode[X](typ) {
     type Ser // type that represents the serialized representation of this class
     val pointer = Pointer(typ, storage.handle)
-    // WithStorage subclasses must store their summaries as the first element of their storage
-    def summary = storage.read[Option[S]](0)
-    protected override def summary_=(s: Option[S]) = {
-      lastInsertion = None
-      storage.write(0, s)
-    }
-    def invalidate() = {summary = None}
     override def upgradeAndLoad(idx: UByte, extraVal: => X) = {
       val ret = super.upgradeAndLoad(idx, extraVal)
       storage.free
@@ -484,9 +474,6 @@ class MapReduceDigitalTrie[V, S]
 
   private abstract class EmptyNode[X <: TaggedValue : Serializer](typ: Byte) extends BaseNode[X](typ) {
     val pointer = Pointer(typ, alloc.nullHandle)
-    def summary: Option[S] = None
-    protected override def summary_=(s: Option[S]) = require(s == None)
-    def invalidate() = ()
     def apply(idx: UByte) = None
     override def foreach[U](f: ((UByte, X)) => U) = ()
     def visit(idx: UByte, absent: => Option[X], present: X => Option[X]) = absent flatMap (newX => upgradeAndLoad(idx, newX))
@@ -495,7 +482,7 @@ class MapReduceDigitalTrie[V, S]
 
   private trait MetaData[NodeType[_ <: TaggedValue] <: WithStorage[_]] {
     def serializer[X <: TaggedValue: Serializer]: Serializer[NodeType[X]#Ser]
-    val branchSerializer = serializer[TaggedPointer]
+    val branchSerializer = serializer[SummarizedPointer]
     val leafSerializer = serializer[LList[V]]
     object Implicits {
       implicit def ser[X <: TaggedValue : Serializer] = serializer[X]
@@ -508,14 +495,14 @@ class MapReduceDigitalTrie[V, S]
 
   private abstract class SingleNode[X <: TaggedValue : Serializer](typ: Byte, storage: alloc.Storage)
       extends WithStorage[X](typ, storage) {
-    type Ser = (Option[S], UByte, X)
+    type Ser = (UByte, X)
     private var dataOpt: Option[(UByte, X)] = None
 
     private def data = dataOpt match {
       case Some((index, x)) =>
         (index, x)
       case None =>
-        val d = storage.read[(UByte, X)](sizeof[Option[S]]) // Skip summary, at start
+        val d = storage.read[(UByte, X)](0)
         dataOpt = Some(d)
         d
     }
@@ -528,7 +515,7 @@ class MapReduceDigitalTrie[V, S]
     def visit(idx: UByte, absent: => Option[X], present: X => Option[X]) = {
       if (idx == index) {
         for (newX <- present(x)) {
-          storage.write(sizeof[(Option[S],UByte)], newX) // skip summary, and UByte, at start
+          storage.write(sizeof[UByte], newX) // skip summary, and UByte, at start
           dataOpt = Some((idx, newX))
         }
         None
@@ -540,7 +527,7 @@ class MapReduceDigitalTrie[V, S]
     def visitAll(f: ((UByte, X)) => Option[X]) = {
       f(data) match {
         case Some(x) =>
-          storage.write(sizeof[Option[S]] + sizeof[UByte], x)
+          storage.write(sizeof[UByte], x)
           dataOpt = Some((index, x))
         case None => // Do nothing
       }
@@ -548,7 +535,7 @@ class MapReduceDigitalTrie[V, S]
 
     protected def bulkLoad(entries: Traversable[(UByte, X)]) = {
       require(entries.size == 1)
-      storage.write(sizeof[Option[S]], entries.head) // Skip summary at start
+      storage.write(0, entries.head) // Skip summary at start
     }
   }
 
@@ -563,7 +550,7 @@ class MapReduceDigitalTrie[V, S]
       extends WithStorage[X](typ, storage) {
     import MultiNode._
     import Implicits._
-    type Ser = (Option[S], IndexedSeq[(UByte, X)])
+    type Ser = IndexedSeq[(UByte, X)]
     implicit val ser = serializer[X]
     protected var dataOpt: Option[IndexedSeq[(UByte, X)]] = None
     type Rec = (Byte, UByte, X)
@@ -571,7 +558,7 @@ class MapReduceDigitalTrie[V, S]
     private def data = dataOpt match {
       case Some(l) => l
       case None =>
-        val l = storage.read[IndexedSeq[(UByte, X)]](sizeof[Option[S]]) // Skip summary at start
+        val l = storage.read[IndexedSeq[(UByte, X)]](0)
         dataOpt = Some(l)
         l
     }
@@ -588,7 +575,7 @@ class MapReduceDigitalTrie[V, S]
           // Found
           val oldX = data(pos)._2
           for (newX <- present(oldX)) {
-            storage.write(sizeof[Option[S]] + pos * sizeof[Rec], (1.toByte, idx, newX)) // Skip summary at start
+            storage.write(pos * sizeof[Rec], (1.toByte, idx, newX)) // Skip summary at start
             dataOpt = Some(data.updated(pos, (idx, newX)))
           }
           None
@@ -618,13 +605,13 @@ class MapReduceDigitalTrie[V, S]
     }
 
     private def writeTo(loc: Int, idx: UByte, x: X) = {
-      storage.write(sizeof[Option[S]] + loc * sizeof[Rec], (1.toByte, idx, x))
+      storage.write(loc * sizeof[Rec], (1.toByte, idx, x))
     }
 
     protected def bulkLoad(entries: Traversable[(UByte, X)]) = {
       val seq = entries.toIndexedSeq: IndexedSeq[(UByte, X)]
       dataOpt = Some(seq)
-      storage.write(sizeof[Option[S]], seq)
+      storage.write(0, seq)
     }
 
   }
@@ -653,21 +640,21 @@ class MapReduceDigitalTrie[V, S]
     import HashBucketNode._
     import Implicits._
     type Bucket = IndexedSeq[(UByte, X)]
-    type Ser = (Option[S], IndexedSeq[Bucket])
+    type Ser = IndexedSeq[Bucket]
     private def bucket(idx: UByte): (Int, Bucket) = {
       val h = hash(idx)
       val data = bucket(h)
       (h, data)
     }
     private def bucket(h: Int): Bucket = {
-      storage.read[Bucket](sizeof[Option[S]] + h * sizeof[Bucket])
+      storage.read[Bucket](h * sizeof[Bucket])
     }
     def apply(idx: UByte) = {
       val (h, data) = bucket(idx)
       data find {case (i, x) => i == idx} map (_._2)
     }
     override def foreach[U](f: ((UByte, X)) => U) = {
-      val buckets = storage.read[IndexedSeq[Bucket]](sizeof[Option[S]])
+      val buckets = storage.read[IndexedSeq[Bucket]](0)
       bucketSort(buckets.flatten).foreach(f)
     }
 
@@ -708,7 +695,7 @@ class MapReduceDigitalTrie[V, S]
     }
 
     private def writeToPos(h: Int, pos: Int, value: (UByte, X)) = {
-      storage.write(sizeof[Option[S]] + h * sizeof[Bucket] +  pos * sizeof[(Byte, UByte, X)], (1.toByte, value._1, value._2))
+      storage.write(h * sizeof[Bucket] +  pos * sizeof[(Byte, UByte, X)], (1.toByte, value._1, value._2))
     }
 
     protected def bulkLoad(entries: Traversable[(UByte, X)]) = {
@@ -716,7 +703,7 @@ class MapReduceDigitalTrie[V, S]
       val buckets: IndexedSeq[Bucket] = for (i <- 0 to 3) yield {
         groups.getOrElse(i, Traversable.empty[(UByte, X)]).toIndexedSeq
       }
-      storage.write(sizeof[Option[S]], buckets)
+      storage.write(0, buckets)
     }
   }
 
@@ -731,17 +718,17 @@ class MapReduceDigitalTrie[V, S]
       extends WithStorage[X](typ, storage) {
     import FullNode._
     import Implicits._
-    type Ser = (Option[S], IndexedSeq[X])
+    type Ser = IndexedSeq[X]
     type Rec = X
     private implicit val ser = collSerializer[X]
 
     def apply(idx: UByte) = {
-      val x = storage.read[X](sizeof[Option[S]] + idx * sizeof[Rec])
+      val x = storage.read[X](idx * sizeof[Rec])
       if (x.interesting) Some(x) else None
     }
 
     override def foreach[U](f: ((UByte, X)) => U) = {
-      val records = storage.read(sizeof[Option[S]])(ser).zipWithIndex
+      val records = storage.read(0)(ser).zipWithIndex
       for ((x, i) <- records; if x.interesting) f((UByte(i.toByte), x))
     }
 
@@ -767,7 +754,7 @@ class MapReduceDigitalTrie[V, S]
     }
 
     private def write(i: UByte, x: X) = {
-      storage.write[X](sizeof[Option[S]] + i * sizeof[Rec], x)
+      storage.write[X](i * sizeof[Rec], x)
     }
 
     protected def bulkLoad(entries: Traversable[(UByte, X)]) = {
@@ -785,18 +772,17 @@ class MapReduceDigitalTrie[V, S]
 
   private trait LeafNode extends BaseNode[LList[V]] {
     type SemanticType = LeafNode
-    def regenerateSummary = {
+    def generateSummary = {
       val values = for {(idx,vlist) <- this
                         v <- vlist} yield v
       val s = mapReduce(values)
-      summary = s
       s
     }
   }
 
-  private trait BranchNode extends BaseNode[TaggedPointer] {
+  private trait BranchNode extends BaseNode[SummarizedPointer] {
     type SemanticType = BranchNode
-    def regenerateSummary = {
+    def generateSummary = {
       val subSummaries = new Traversable[S] {
         def foreach[U](f: S => U): Unit = {
           visitAll {case (idx, x) =>
@@ -809,7 +795,6 @@ class MapReduceDigitalTrie[V, S]
         override def isEmpty = this.isInstanceOf[EmptyNode[_]]
       }
       val s = rereduce(subSummaries)
-      summary = s
       s
     }
   }
@@ -817,50 +802,50 @@ class MapReduceDigitalTrie[V, S]
   /*
    * Concrete types
    */
-  private class EmptyBranchNode extends EmptyNode[TaggedPointer](0) with BranchNode {
-    def upgrade(entries: Traversable[(UByte, TaggedPointer)]) = {
+  private class EmptyBranchNode extends EmptyNode[SummarizedPointer](0) with BranchNode {
+    def upgrade(entries: Traversable[(UByte, SummarizedPointer)]) = {
       new SingleBranchNode(entries)
     }
   }
 
   private class SingleBranchNode(storage: alloc.Storage)
-      extends SingleNode[TaggedPointer](1, storage) with BranchNode {
-    def this(entries: Traversable[(UByte, TaggedPointer)]) {
+      extends SingleNode[SummarizedPointer](1, storage) with BranchNode {
+    def this(entries: Traversable[(UByte, SummarizedPointer)]) {
       this(alloc(SingleNode.branchSerializer))
       bulkLoad(entries)
     }
 
-    def upgrade(entries: Traversable[(UByte, TaggedPointer)]) = {
+    def upgrade(entries: Traversable[(UByte, SummarizedPointer)]) = {
       new MultiBranchNode(entries)
     }
   }
 
   private class MultiBranchNode(storage: alloc.Storage)
-      extends MultiNode[TaggedPointer](2, storage) with BranchNode {
-    def this(entries: Traversable[(UByte, TaggedPointer)]) {
+      extends MultiNode[SummarizedPointer](2, storage) with BranchNode {
+    def this(entries: Traversable[(UByte, SummarizedPointer)]) {
       this(alloc(MultiNode.branchSerializer))
       bulkLoad(entries)
     }
-    def upgrade(entries: Traversable[(UByte, TaggedPointer)]) = {
+    def upgrade(entries: Traversable[(UByte, SummarizedPointer)]) = {
       new HashBucketBranchNode(entries)
     }
   }
 
   private class HashBucketBranchNode(storage: alloc.Storage)
-      extends HashBucketNode[TaggedPointer](3, storage) with BranchNode {
-    def this(entries: Traversable[(UByte, TaggedPointer)]) {
+      extends HashBucketNode[SummarizedPointer](3, storage) with BranchNode {
+    def this(entries: Traversable[(UByte, SummarizedPointer)]) {
       this(alloc(HashBucketNode.branchSerializer))
       bulkLoad(entries)
     }
-    def upgrade(entries: Traversable[(UByte, TaggedPointer)]) = {
+    def upgrade(entries: Traversable[(UByte, SummarizedPointer)]) = {
       new FullBranchNode(entries)
     }
   }
 
 
   private class FullBranchNode(storage: alloc.Storage)
-      extends FullNode[TaggedPointer](4, storage) with BranchNode {
-    def this(entries: Traversable[(UByte, TaggedPointer)]) {
+      extends FullNode[SummarizedPointer](4, storage) with BranchNode {
+    def this(entries: Traversable[(UByte, SummarizedPointer)]) {
       this(alloc(FullNode.branchSerializer))
       bulkLoad(entries)
     }
