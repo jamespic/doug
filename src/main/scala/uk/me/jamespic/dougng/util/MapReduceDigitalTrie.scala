@@ -178,6 +178,10 @@ class MapReduceDigitalTrie[V, S]
     getBetween(low.bytes.reverse, high.bytes.reverse, rootNode())
   }
 
+  def getBetween(low: Option[Long], high: Option[Long]): Traversable[V] = {
+    getBetween(low getOrElse Long.MinValue, high getOrElse Long.MaxValue)
+  }
+
   private def getBetween(lowRoute: Seq[UByte], highRoute: Seq[UByte], node: Node): Traversable[V] = {
     import Ordering.Implicits._
     val lowHead +: lowTail = lowRoute
@@ -272,6 +276,10 @@ class MapReduceDigitalTrie[V, S]
 
   def summaryBetween(low: Long, high: Long): Option[S] = sync {
     summaryBetween(low.bytes.reverse, high.bytes.reverse, rootNode())
+  }
+
+  def summaryBetween(low: Option[Long], high: Option[Long]): Option[S] = {
+    summaryBetween(low getOrElse Long.MinValue, high getOrElse Long.MaxValue)
   }
 
   private def summaryBetween(lowRoute: Seq[UByte], highRoute: Seq[UByte], node: Node): Option[S] = {
