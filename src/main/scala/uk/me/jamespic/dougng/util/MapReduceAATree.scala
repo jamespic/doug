@@ -16,8 +16,22 @@ sealed trait MapReduceAATree[K, V, S] extends Traversable[(K, V)] {
   val summary: Option[S]
   def +(e: (K, V)): MapReduceAATree[K, V, S]
   def checkInvariants: Unit
-  def summaryBetween(from: K, to: K): Option[S]
-  def summaryBetween(from: Option[K], to: Option[K]): Option[S]
+  def summaryBetween(low: K, high: K): Option[S] = summaryBetween(Some(low), Some(high))
+  def summaryBetween(low: Option[K], high: Option[K]): Option[S]
+  def getBetween(low: Option[K], high: Option[K]): Traversable[V] = {
+      new Traversable[V] {
+        def foreach[U](f: V => U) = {
+          doBetween(low, high, f)
+        }
+        override def stringPrefix = "View"
+      }
+    }
+  def getBetween(low: K, high: K):  Traversable[V] = getBetween(Some(low), Some(high))
+  def get(k: K) = getBetween(k, k)
+  def minKey: Option[K]
+  def maxKey: Option[K]
+  private[util] def doBetween[U](low: Option[K], high: Option[K], f: V => U): Unit
+
   override def stringPrefix = "MapReduceAATree"
 }
 
@@ -36,10 +50,13 @@ private[util] final class TreeContext[K, V, S]
     override def isEmpty = true
     override def +(e: (K, V)) = {
       val (key, value) = e
-      BranchNode(key, List(value), NullNode, NullNode, 1)
+      BranchNode(key, value :: Nil, NullNode, NullNode, 1)
     }
-    override def summaryBetween(from: K, to: K) = None
-    override def summaryBetween(from: Option[K], to: Option[K]) = None
+    override def summaryBetween(low: Option[K], high: Option[K]) = None
+    override def getBetween(low: Option[K], high: Option[K]) = Traversable.empty
+    private[util] override def doBetween[U](low: Option[K], high: Option[K], f: V => U) = ()
+    override def minKey = None
+    override def maxKey = None
   }
 
   private[util] case class BranchNode(key: K, values: List[V], left: Node, right: Node, level: Int) extends Node {
@@ -61,39 +78,71 @@ private[util] final class TreeContext[K, V, S]
       )
     }
 
-    override def summaryBetween(from: K, to: K) = {
-      summaryBetween(Some(from), Some(to))
-    }
-
-    override def summaryBetween(from: Option[K], to: Option[K]) = {
-      if (from == None && to == None) summary
+    override def summaryBetween(low: Option[K], high: Option[K]) = {
+      if (low == None && high == None) summary
       else {
-        val leftRightWall = to filter (_ < key)
-        val leftBlock = from match {
-          case Some(fromVal) if fromVal < key =>
-            left.summaryBetween(from, leftRightWall)
+        val leftRightWall = high filter (_ < key)
+        val leftBlock = low match {
+          case Some(lowVal) if lowVal < key =>
+            left.summaryBetween(low, leftRightWall)
           case None =>
             left.summaryBetween(None, leftRightWall)
           case _ =>
             None
         }
 
-        val rightLeftWall = from filter (_ > key)
-        val rightBlock = to match {
-          case Some(toVal) if toVal > key =>
-            right.summaryBetween(rightLeftWall, to)
+        val rightLeftWall = low filter (_ > key)
+        val rightBlock = high match {
+          case Some(highVal) if highVal > key =>
+            right.summaryBetween(rightLeftWall, high)
           case None =>
-            right.summaryBetween(rightLeftWall, to)
+            right.summaryBetween(rightLeftWall, high)
           case _ =>
             None
         }
 
-        val centreBlock = if (from.exists(_ > key) || to.exists(_ < key)) {// if from > key or to < key, don't include values
+        val centreBlock = if (low.exists(_ > key) || high.exists(_ < key)) {// if low > key or high < key, don't include values
           None
         } else {
           mapReduce(values)
         }
         rereduce(Traversable.concat(leftBlock, centreBlock, rightBlock))
+      }
+    }
+
+    override def minKey = {
+      left.minKey orElse Some(key)
+    }
+
+    override def maxKey = {
+      right.maxKey orElse Some(key)
+    }
+
+    private[util] override def doBetween[U](low: Option[K], high: Option[K], f: V => U) = {
+      val leftRightWall = high filter (_ < key)
+      low match {
+        case Some(lowVal) if lowVal < key =>
+          left.doBetween(low, leftRightWall, f)
+        case None =>
+          left.doBetween(None, leftRightWall, f)
+        case _ =>
+          ()
+      }
+
+      val rightLeftWall = low filter (_ > key)
+      high match {
+        case Some(highVal) if highVal > key =>
+          right.doBetween(rightLeftWall, high, f)
+        case None =>
+          right.doBetween(rightLeftWall, high, f)
+        case _ =>
+          ()
+      }
+
+      val centreBlock = if (low.exists(_ > key) || high.exists(_ < key)) {// if low > key or high < key, don't include values
+        None
+      } else {
+        for (v <- values) f(v)
       }
     }
 
@@ -111,7 +160,7 @@ private[util] final class TreeContext[K, V, S]
       }
     }
 
-    def skew = left match {
+    private def skew = left match {
       case BranchNode(lKey, lValues, a, b, lLevel) if lLevel == this.level =>
         val t = BranchNode(this.key, this.values, b, this.right, this.level)
         val l = BranchNode(lKey, lValues, a, t, lLevel)
@@ -119,7 +168,7 @@ private[util] final class TreeContext[K, V, S]
       case _ => this
     }
 
-    def split = right match {
+    private def split = right match {
       case BranchNode(rKey, rValues, b, x, rLevel) if x.level == this.level =>
         val t = BranchNode(this.key, this.values, this.left, b, this.level)
         val r = BranchNode(rKey, rValues, t, x, rLevel + 1)
@@ -127,7 +176,7 @@ private[util] final class TreeContext[K, V, S]
       case _ => this
     }
 
-    def balance = this.skew.split
+    private def balance = this.skew.split
 
     def checkInvariants = {
       assert("Left child is below me")(left.level == this.level - 1)

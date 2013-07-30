@@ -205,6 +205,21 @@ object Serializer extends LowPriorityImplicits {
     }
   }
 
+  def byteArraySerializer(length: Int) = new ByteArraySerializer(length)
+
+  class ByteArraySerializer(length: Int) extends Serializer[Array[Byte]] {
+    val size = length
+    def serialize(value: Array[Byte], buffer: ByteBuffer) = {
+      require(value.length == length)
+      buffer.put(value)
+    }
+    def deserialize(buffer: ByteBuffer) = {
+      val arr = new Array[Byte](length)
+      buffer.get(arr)
+      arr
+    }
+  }
+
   object ExtraImplicits {
     //Relegated to ExtraImplicits, as they tend to make hlistSerializer implicits diverge
     implicit def tupleSerializer[T <: Product, L <: HList]
