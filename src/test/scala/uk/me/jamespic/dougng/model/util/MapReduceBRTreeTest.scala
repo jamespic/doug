@@ -40,8 +40,10 @@ class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen
       val alloc = new MappedAllocator()
       val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
 
-      for (i <- 1L to 1000000L) {
-        instance += i -> i
+      time {
+        for (i <- 1L to 100000L) {
+          instance += i -> i
+        }
       }
     }
     
@@ -50,9 +52,11 @@ class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen
       val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
       val rand = new java.util.Random
       
-      for (i <- 1L to 1000000L) {
-        val j = rand.nextLong()
-        instance += j -> j
+      time {
+        for (i <- 1L to 100000L) {
+          val j = rand.nextLong()
+          instance += j -> j
+        }
       }
     }
   }

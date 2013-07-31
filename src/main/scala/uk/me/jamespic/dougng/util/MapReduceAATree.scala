@@ -18,19 +18,19 @@ sealed trait MapReduceAATree[K, V, S] extends Traversable[(K, V)] {
   def checkInvariants: Unit
   def summaryBetween(low: K, high: K): Option[S] = summaryBetween(Some(low), Some(high))
   def summaryBetween(low: Option[K], high: Option[K]): Option[S]
-  def getBetween(low: Option[K], high: Option[K]): Traversable[V] = {
-      new Traversable[V] {
-        def foreach[U](f: V => U) = {
+  def getBetween(low: Option[K], high: Option[K]): Traversable[(K, V)] = {
+      new Traversable[(K, V)] {
+        def foreach[U](f: ((K, V)) => U) = {
           doBetween(low, high, f)
         }
         override def stringPrefix = "View"
       }
     }
-  def getBetween(low: K, high: K):  Traversable[V] = getBetween(Some(low), Some(high))
+  def getBetween(low: K, high: K):  Traversable[(K, V)] = getBetween(Some(low), Some(high))
   def get(k: K) = getBetween(k, k)
   def minKey: Option[K]
   def maxKey: Option[K]
-  private[util] def doBetween[U](low: Option[K], high: Option[K], f: V => U): Unit
+  private[util] def doBetween[U](low: Option[K], high: Option[K], f: ((K, V)) => U): Unit
 
   override def stringPrefix = "MapReduceAATree"
 }
@@ -54,7 +54,7 @@ private[util] final class TreeContext[K, V, S]
     }
     override def summaryBetween(low: Option[K], high: Option[K]) = None
     override def getBetween(low: Option[K], high: Option[K]) = Traversable.empty
-    private[util] override def doBetween[U](low: Option[K], high: Option[K], f: V => U) = ()
+    private[util] override def doBetween[U](low: Option[K], high: Option[K], f: ((K, V)) => U) = ()
     override def minKey = None
     override def maxKey = None
   }
@@ -118,7 +118,7 @@ private[util] final class TreeContext[K, V, S]
       right.maxKey orElse Some(key)
     }
 
-    private[util] override def doBetween[U](low: Option[K], high: Option[K], f: V => U) = {
+    private[util] override def doBetween[U](low: Option[K], high: Option[K], f: ((K, V)) => U) = {
       val leftRightWall = high filter (_ < key)
       low match {
         case Some(lowVal) if lowVal < key =>
@@ -142,7 +142,7 @@ private[util] final class TreeContext[K, V, S]
       val centreBlock = if (low.exists(_ > key) || high.exists(_ < key)) {// if low > key or high < key, don't include values
         None
       } else {
-        for (v <- values) f(v)
+        for (v <- values) f((key, v))
       }
     }
 
