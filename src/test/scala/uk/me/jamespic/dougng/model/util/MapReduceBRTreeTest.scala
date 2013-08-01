@@ -34,6 +34,21 @@ class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen
 
       instance should have size(1000)
       instance.toList should equal(for (i <- 1L to 1000L) yield i -> i)
+
+    }
+
+    it("should be randomly constructible") {
+      val alloc = new DebuggingAllocator()
+      val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
+
+      val rand = new scala.util.Random
+      rand.setSeed(0L)
+
+      val entries = for (i <- 1L to 1013L) yield i -> i
+      for (e <- rand.shuffle(entries)) {
+        instance += e
+      }
+      instance.getBetween(Some(380L), Some(671L)).toList should equal(for (i <- 380L to 671L) yield i -> i)
     }
 
     it("should be fast") {
@@ -46,12 +61,12 @@ class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen
         }
       }
     }
-    
+
     it("should be fast with random data") {
       val alloc = new MappedAllocator()
       val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
       val rand = new java.util.Random
-      
+
       time {
         for (i <- 1L to 100000L) {
           val j = rand.nextLong()

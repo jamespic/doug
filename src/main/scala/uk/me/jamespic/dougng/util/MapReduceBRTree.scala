@@ -65,14 +65,24 @@ class MapReduceBRTree[K, V, S]
 
   def sync[A](f: => A) = alloc.sync(f)
 
-  def +=(entry: (K, V)) = sync {
-    val insertion = rootPointer.insert(entry :: Nil)
+  def +=(entry: (K, V)) = this ++= (entry :: Nil)
+
+  def ++=(entries: TraversableOnce[(K, V)]) = sync {
+    val insertion = rootPointer.insert(entries.toList)
     if (insertion.destructive) rootPointer = insertion.buildRoot
   }
 
   def foreach[U](f: ((K, V)) => U): Unit = {
+    doBetween(f, None, None)
+  }
+
+  def getBetween(low: Option[K], high: Option[K]): Traversable[(K, V)] = new Traversable[(K, V)] {
+    def foreach[U](f: ((K, V)) => U): Unit = doBetween(f, low, high)
+  }
+
+  private def doBetween[U](f: ((K, V)) => U, low: Option[K], high: Option[K]): Unit = {
     val queue = new PriorityQueue(64, kOrdering)
-    rootPointer.visit(f, queue)
+    rootPointer.visit(f, low, high, queue)
     while (true) {
       queue.poll() match {
         case null => return
@@ -86,7 +96,7 @@ class MapReduceBRTree[K, V, S]
   private case object BranchType extends PointerType
 
   private trait Visitable {
-    def visit[U](f: ((K, V)) => U, q: PriorityQueue[(K, V)]): Unit
+    def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]): Unit
   }
 
   private class Pointer(storage: Allocator#Storage, offset: Int)
@@ -105,8 +115,10 @@ class MapReduceBRTree[K, V, S]
       case BranchType => _typ() = 1
     }
 
-    def visit[U](f: ((K, V)) => U, q: PriorityQueue[(K, V)]) = {
-      q.addAll(buffer)
+    def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]) = {
+      for (e @ (k, _) <- buffer if low.forall(_ <= k) && high.forall(k <= _)) {
+        q add e
+      }
       val node = typ match {
         case LeafType =>
           val s = alloc.storage(loc(), leafInfo.size)
@@ -115,7 +127,7 @@ class MapReduceBRTree[K, V, S]
           val s = alloc.storage(loc(), branchInfo.size)
           new Branch(s, 0)
       }
-      node.visit(f, q)
+      node.visit(f, low, high, q)
     }
 
 
@@ -143,7 +155,6 @@ class MapReduceBRTree[K, V, S]
     	      buildNewLeafNodes(merged)
     	    }
     	  case BranchType =>
-    	    // FIXME: Implement this
     	    val oldStorage = alloc.storage(loc(), branchInfo.size)
     	    val oldNode = new Branch(oldStorage, 0)
     	    val mergedPointers = ListBuffer.empty[Pointer]
@@ -239,6 +250,9 @@ class MapReduceBRTree[K, V, S]
         buildRec(ptail, etail, i + 1)
       case (Nil, Nil) =>
         ()
+      case _ =>
+        throw new IllegalStateException("Lists should be the same length")
+
     }
     currentNode.pointers += ptrs.head
     buildRec(ptrs.tail, es, 0)
@@ -270,33 +284,50 @@ class MapReduceBRTree[K, V, S]
     }
   }
 
+  private trait VisitableNode extends Visitable {
+    final def flushAndVisit[U](e: (K, V), f: ((K, V)) => U, q: PriorityQueue[(K, V)]) = {
+      while (!q.isEmpty() && e > q.peek()) {
+        f(q.poll())
+      }
+      f(e)
+    }
+  }
+
   private class Branch(storage: Allocator#Storage, offset: Int)
       extends Struct[Branch](storage, offset)
-      with Visitable {
+      with VisitableNode {
     val data = __buffer__[(K, V)](fanout)
     val pointers = __struct_buffer__[Pointer](fanout + 1)
 
-    def visit[U](f: ((K, V)) => U, q: PriorityQueue[(K, V)]) = {
-      val head :: tail = pointers.toList
-      head.visit(f, q)
-      for ((d, ptr) <- data.toList zip tail) {
-        f(d)
-        ptr.visit(f, q)
+    def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]) = {
+      val entries = data.toArray
+      for ((ptr, i) <- pointers.zipWithIndex) {
+        val leftKeyOpt = if (i == 0) None else Some(entries(i - 1)._1)
+        val rightOpt = if (i == entries.length) None else Some(entries(i))
+        val rightKeyOpt = rightOpt map (_._1)
+        val leftEdge = low filter {lowKey => leftKeyOpt forall (nodeKey => nodeKey <= lowKey)}
+        val rightEdge = high filter {highKey => rightKeyOpt forall (nodeKey => highKey <= nodeKey)}
+        if ((rightKeyOpt.isEmpty || low.isEmpty || low.get <= rightKeyOpt.get) &&
+            (leftKeyOpt.isEmpty || high.isEmpty || leftKeyOpt.get <= high.get)) {
+          ptr.visit(f, leftEdge, rightEdge, q)
+        }
+        for (e @ (k, _) <- rightOpt) {
+          if ((low forall (_ <= k)) && (high forall (k <= _))) {
+            flushAndVisit(e, f, q)
+          }
+        }
       }
     }
   }
 
   private class Leaf(storage: Allocator#Storage, offset: Int)
       extends Struct[Leaf](storage, offset)
-      with Visitable {
+      with VisitableNode {
     val data = __buffer__[(K, V)](fanout)
 
-    def visit[U](f: ((K, V)) => U, q: PriorityQueue[(K, V)]) = {
-      for (e <- data) {
-        while (!q.isEmpty() && e > q.peek()) {
-          f(q.poll())
-        }
-        f(e)
+    def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]) = {
+      for (e @ (k, _) <- data if low.forall(_ <= k) && high.forall(k <= _)) {
+        flushAndVisit(e, f, q)
       }
     }
   }
