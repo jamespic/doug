@@ -37,6 +37,9 @@ object MapReduceBRTree {
     val right = splitRec(l)
     (left.result, right)
   }
+
+  private val dummyFn = {(e: Any) => ()}
+
 }
 
 class MapReduceBRTree[K, V, S]
@@ -72,13 +75,20 @@ class MapReduceBRTree[K, V, S]
     if (insertion.destructive) rootPointer = insertion.buildRoot
   }
 
-  def foreach[U](f: ((K, V)) => U): Unit = {
+  def foreach[U](f: ((K, V)) => U): Unit = sync {
     doBetween(f, None, None)
   }
 
   def getBetween(low: Option[K], high: Option[K]): Traversable[(K, V)] = new Traversable[(K, V)] {
-    def foreach[U](f: ((K, V)) => U): Unit = doBetween(f, low, high)
+    def foreach[U](f: ((K, V)) => U): Unit = sync(doBetween(f, low, high))
   }
+
+  //FIXME: Test this
+  def summaryBetween(low: Option[K], high: Option[K]): Option[S] = sync {
+    rootPointer.summaryBetween(low, high)
+  }
+  
+  def summary = summaryBetween(None, None)
 
   private def doBetween[U](f: ((K, V)) => U, low: Option[K], high: Option[K]): Unit = {
     val queue = new PriorityQueue(64, kOrdering)
@@ -91,12 +101,22 @@ class MapReduceBRTree[K, V, S]
     }
   }
 
+  private def inRange(k: K, low: Option[K], high: Option[K]) = {
+    low.forall(_ <= k) && high.forall(k <= _)
+  }
+
+  private def summarise(data: Traversable[(K,V)], low: Option[K], high: Option[K]): Option[S] = {
+    val affected = for ((k, v) <- data.view if inRange(k, low, high)) yield v
+    mapReduce(affected)
+  }
+
   private sealed trait PointerType
   private case object LeafType extends PointerType
   private case object BranchType extends PointerType
 
   private trait Visitable {
     def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]): Unit
+    def summaryBetween(low: Option[K], high: Option[K]): Option[S]
   }
 
   private class Pointer(storage: Allocator#Storage, offset: Int)
@@ -119,7 +139,11 @@ class MapReduceBRTree[K, V, S]
       for (e @ (k, _) <- buffer if low.forall(_ <= k) && high.forall(k <= _)) {
         q add e
       }
-      val node = typ match {
+      node.visit(f, low, high, q)
+    }
+
+    def node = {
+      typ match {
         case LeafType =>
           val s = alloc.storage(loc(), leafInfo.size)
           new Leaf(s, 0)
@@ -127,9 +151,25 @@ class MapReduceBRTree[K, V, S]
           val s = alloc.storage(loc(), branchInfo.size)
           new Branch(s, 0)
       }
-      node.visit(f, low, high, q)
     }
 
+    def summaryBetween(low: Option[K], high: Option[K]): Option[S] = {
+      if (low == None && high == None) {
+        summary() match {
+          case s: Some[S] => s
+          case None =>
+            val s = calculateSummary(None, None)
+            summary() = s
+            s
+        }
+      } else {
+        calculateSummary(low, high)
+      }
+    }
+
+    private def calculateSummary(low: Option[K], high: Option[K]) = {
+      rereduce(Traversable.concat(summarise(buffer, low, high), node.summaryBetween(low, high)))
+    }
 
     def insert(entries: List[(K, V)]): Insertion = {
       summary() = None
@@ -300,6 +340,15 @@ class MapReduceBRTree[K, V, S]
     val pointers = __struct_buffer__[Pointer](fanout + 1)
 
     def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]) = {
+      walk({(ptr, leftEdge, rightEdge) => ptr.visit(f, leftEdge, rightEdge, q)},
+           {e => flushAndVisit(e, f, q)},
+           low, high)
+
+    }
+
+    private def walk(ptrFn: (Pointer, Option[K], Option[K]) => Unit,
+        eFn: ((K, V)) => Unit,
+        low: Option[K], high: Option[K]): Unit = {
       val entries = data.toArray
       for ((ptr, i) <- pointers.zipWithIndex) {
         val leftKeyOpt = if (i == 0) None else Some(entries(i - 1)._1)
@@ -309,14 +358,27 @@ class MapReduceBRTree[K, V, S]
         val rightEdge = high filter {highKey => rightKeyOpt forall (nodeKey => highKey <= nodeKey)}
         if ((rightKeyOpt.isEmpty || low.isEmpty || low.get <= rightKeyOpt.get) &&
             (leftKeyOpt.isEmpty || high.isEmpty || leftKeyOpt.get <= high.get)) {
-          ptr.visit(f, leftEdge, rightEdge, q)
+          ptrFn(ptr, leftEdge, rightEdge)
         }
-        for (e @ (k, _) <- rightOpt) {
+        if (eFn ne dummyFn) for (e @ (k, _) <- rightOpt) {
           if ((low forall (_ <= k)) && (high forall (k <= _))) {
-            flushAndVisit(e, f, q)
+            eFn(e)
           }
         }
       }
+    }
+
+    def summaryBetween(low: Option[K], high: Option[K]): Option[S] = {
+      val trav = new Traversable[S] {
+        def foreach[U](f: S => U) = {
+          summarise(data, low, high) foreach f
+          walk({(ptr, leftEdge, rightEdge) => ptr.summaryBetween(leftEdge, rightEdge) foreach f},
+               dummyFn,
+               low, high
+              )
+        }
+      }
+      rereduce(trav)
     }
   }
 
@@ -326,9 +388,13 @@ class MapReduceBRTree[K, V, S]
     val data = __buffer__[(K, V)](fanout)
 
     def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]) = {
-      for (e @ (k, _) <- data if low.forall(_ <= k) && high.forall(k <= _)) {
+      for (e @ (k, _) <- data if inRange(k, low, high)) {
         flushAndVisit(e, f, q)
       }
+    }
+
+    def summaryBetween(low: Option[K], high: Option[K]): Option[S] = {
+      summarise(data, low, high)
     }
   }
 }

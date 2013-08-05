@@ -42,13 +42,28 @@ class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen
       val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
 
       val rand = new scala.util.Random
-      rand.setSeed(0L)
+      rand.setSeed(0L) // Set seed deterministically
 
       val entries = for (i <- 1L to 1013L) yield i -> i
       for (e <- rand.shuffle(entries)) {
         instance += e
       }
       instance.getBetween(Some(380L), Some(671L)).toList should equal(for (i <- 380L to 671L) yield i -> i)
+    }
+    
+    it("should be summarizable") {
+      val alloc = new DebuggingAllocator()
+      val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
+
+      for (i <- 1L to 1000L) {
+        instance += i -> i
+      }
+      
+      instance.summary should equal(Some(500500L))
+      instance.summaryBetween(Some(10L), Some(100L)) should equal(Some(5005L))
+      instance.summaryBetween(None, Some(0L)) should equal(None)
+      instance.summaryBetween(None, Some(1L)) should equal(Some(1L))
+      instance.summaryBetween(Some(1000L), None) should equal(Some(1000L))
     }
 
     it("should be fast") {
