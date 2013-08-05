@@ -1,9 +1,8 @@
-package uk.me.jamespic.dougng.model.util
+package uk.me.jamespic.dougng.util
 
 import org.scalatest.FunSpec
 import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.GivenWhenThen
-import uk.me.jamespic.dougng.util._
 
 
 class StructTest extends FunSpec with ShouldMatchers with GivenWhenThen {

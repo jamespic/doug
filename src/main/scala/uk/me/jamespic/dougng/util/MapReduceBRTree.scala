@@ -45,8 +45,8 @@ object MapReduceBRTree {
 class MapReduceBRTree[K, V, S]
     (mapReduce: Traversable[V] => Option[S], rereduce: Traversable[S] => Option[S])
     (alloc: Allocator)
-    (implicit serk: Serializer[K], ord: Ordering[K], sers: Serializer[S], serv: Serializer[V])
-    extends Traversable[(K, V)] {
+    (implicit serk: Serializer[K], val ordering: Ordering[K], sers: Serializer[S], serv: Serializer[V])
+    extends MutableMapReduce[K, V, S] {
   import Ordering.Implicits._
   import MapReduceBRTree._
 
@@ -66,31 +66,21 @@ class MapReduceBRTree[K, V, S]
     pointer
   }
 
-  def +=(entry: (K, V)) = this ++= (entry :: Nil)
-
-  def ++=(entries: TraversableOnce[(K, V)]) = synchronized {
-    val insertion = rootPointer.insert(entries.toList)
+  def +=(entry: (K, V)) = alloc.synchronized {
+    val insertion = rootPointer.insert(entry :: Nil)
     if (insertion.destructive) rootPointer = insertion.buildRoot
   }
 
-  def foreach[U](f: ((K, V)) => U): Unit = synchronized {
-    doBetween(f, None, None)
-  }
-
-  def getBetween(low: Option[K], high: Option[K]): Traversable[(K, V)] = new Traversable[(K, V)] {
-    def foreach[U](f: ((K, V)) => U): Unit = synchronized(doBetween(f, low, high))
-  }
-
-  //FIXME: Test this
-  def summaryBetween(low: Option[K], high: Option[K]): Option[S] = synchronized {
+  def summaryBetween(low: Option[K], high: Option[K]): Option[S] = alloc.synchronized {
     rootPointer.summaryBetween(low, high)
   }
 
-  def summary = summaryBetween(None, None)
+  def minKey: Option[K] = alloc.synchronized {rootPointer.minKey}
+  def maxKey: Option[K] = alloc.synchronized {rootPointer.maxKey}
 
   def close() = alloc.close
 
-  private def doBetween[U](f: ((K, V)) => U, low: Option[K], high: Option[K]): Unit = {
+  def doBetween[U](low: Option[K], high: Option[K], f: ((K, V)) => U): Unit = alloc.synchronized {
     val queue = new PriorityQueue(64, kOrdering)
     rootPointer.visit(f, low, high, queue)
     while (true) {
@@ -117,6 +107,8 @@ class MapReduceBRTree[K, V, S]
   private trait Visitable {
     def visit[U](f: ((K, V)) => U, low: Option[K], high: Option[K], q: PriorityQueue[(K, V)]): Unit
     def summaryBetween(low: Option[K], high: Option[K]): Option[S]
+    def minKey: Option[K]
+    def maxKey: Option[K]
   }
 
   private class Pointer(storage: Allocator#Storage, offset: Int)
@@ -166,6 +158,9 @@ class MapReduceBRTree[K, V, S]
         calculateSummary(low, high)
       }
     }
+
+    def maxKey: Option[K] = Traversable.concat(node.maxKey, buffer.view.map(_._1)) reduceOption (_ max _)
+    def minKey: Option[K] = Traversable.concat(node.minKey, buffer.view.map(_._1)) reduceOption (_ min _)
 
     private def calculateSummary(low: Option[K], high: Option[K]) = {
       rereduce(Traversable.concat(summarise(buffer, low, high), node.summaryBetween(low, high)))
@@ -380,6 +375,9 @@ class MapReduceBRTree[K, V, S]
       }
       rereduce(trav)
     }
+
+    def maxKey: Option[K] = pointers.last.maxKey
+    def minKey: Option[K] = pointers.head.minKey
   }
 
   private class Leaf(storage: Allocator#Storage, offset: Int)
@@ -396,5 +394,7 @@ class MapReduceBRTree[K, V, S]
     def summaryBetween(low: Option[K], high: Option[K]): Option[S] = {
       summarise(data, low, high)
     }
+    def maxKey: Option[K] = data.lastOption.map(_._1)
+    def minKey: Option[K] = data.headOption.map(_._1)
   }
 }

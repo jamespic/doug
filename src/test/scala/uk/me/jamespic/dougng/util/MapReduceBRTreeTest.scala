@@ -1,9 +1,8 @@
-package uk.me.jamespic.dougng.model.util
+package uk.me.jamespic.dougng.util
 
 import org.scalatest.FunSpec
 import org.scalatest.matchers.ShouldMatchers
 import org.scalatest.GivenWhenThen
-import uk.me.jamespic.dougng.util._
 
 class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen {
   describe("A MapReduceBRTree") {
@@ -50,7 +49,7 @@ class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen
       }
       instance.getBetween(Some(380L), Some(671L)).toList should equal(for (i <- 380L to 671L) yield i -> i)
     }
-    
+
     it("should be summarizable") {
       val alloc = new DebuggingAllocator()
       val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
@@ -58,7 +57,7 @@ class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen
       for (i <- 1L to 1000L) {
         instance += i -> i
       }
-      
+
       instance.summary should equal(Some(500500L))
       instance.summaryBetween(Some(10L), Some(100L)) should equal(Some(5005L))
       instance.summaryBetween(None, Some(0L)) should equal(None)
