@@ -7,18 +7,16 @@ object ChannelAllocator {
   private val InternalBufferSize = 8192
 }
 
-class ChannelAllocator extends Allocator {
+class ChannelAllocator extends Allocator {self =>
   type HandleType = Long
   val handleSerializer = implicitly[Serializer[HandleType]]
   val nullHandle = -1L
-  private val file = new FileHolder(0)
+  private val file = new FileHolder()
   private var freeList = Map.empty[Int, List[Long]]
   private var limit = 0L
   private val buf = ByteBuffer.allocate(ChannelAllocator.InternalBufferSize)
-  override def sync[B](f: => B) = file.sync(f)
-  def hibernate() = file.hibernate()
 
-  def apply(size: Int) = sync {
+  def apply(size: Int) = self.synchronized {
     val start = if (freeList contains size) {
       val s :: tail = freeList(size)
       tail match {
@@ -39,16 +37,16 @@ class ChannelAllocator extends Allocator {
    * a valid block of disk storage, undefined behaviour may occur.
    */
 
-  def storage(handle: Long, size: Int) = sync {
+  def storage(handle: Long, size: Int) = self.synchronized {
     new ChannelStorage(handle, size)
   }
 
-  def close = sync {
+  def close = self.synchronized {
     file.close
     freeList = Map.empty
   }
 
-  override def toString = sync {
+  override def toString = self.synchronized {
     if (file.channel != null) {
       s"<ChannelAllocator: File: ${file.file}, $fragmentation% fragmented>"
     } else {
@@ -56,14 +54,14 @@ class ChannelAllocator extends Allocator {
     }
   }
 
-  def fragmentation = sync {
+  def fragmentation = self.synchronized {
     val freeSize = (freeList.map {case (size, list) => size.toLong * list.size.toLong}).sum
     100.0f * freeSize / limit
   }
 
   class ChannelStorage(start: Long, size: Int) extends Storage {
     private var valid = true
-    def handle = sync {
+    def handle = self.synchronized {
       checkValid
       start
     }
@@ -99,7 +97,7 @@ class ChannelAllocator extends Allocator {
       }
     }
 
-    def write[A](off: Int, value: A)(implicit ser: Serializer[A]): Unit = sync {
+    def write[A](off: Int, value: A)(implicit ser: Serializer[A]): Unit = self.synchronized {
       checkValid
       checkBounds(off, ser.size)
       val buff = buffer(ser.size)
@@ -108,7 +106,7 @@ class ChannelAllocator extends Allocator {
       file.channel.write(buff, start + off)
     }
 
-    def read[A](off: Int)(implicit ser: Serializer[A]): A = sync {
+    def read[A](off: Int)(implicit ser: Serializer[A]): A = self.synchronized {
       checkValid
       checkBounds(off, ser.size)
       val buf = buffer(ser.size)
@@ -117,7 +115,7 @@ class ChannelAllocator extends Allocator {
       ser.deserialize(buf)
     }
 
-    def free: Unit = sync {
+    def free: Unit = self.synchronized {
       checkValid
       valid = false
       if (size > 0) {
@@ -125,7 +123,7 @@ class ChannelAllocator extends Allocator {
       }
     }
 
-    override def toString = sync {
+    override def toString = self.synchronized {
       if (valid) {
         s"${ChannelAllocator.this}.ChannelStorage($start, $size)"
       } else {

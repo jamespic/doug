@@ -5,3 +5,7 @@ object MapReduce {
     trav.reduceOption[A]((x, y) => num.mkNumericOps(x) + y) // Stupid string implicits
   }
 }
+
+trait MapReduce {
+
+}

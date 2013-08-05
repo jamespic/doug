@@ -46,7 +46,7 @@ class MapReduceBRTree[K, V, S]
     (mapReduce: Traversable[V] => Option[S], rereduce: Traversable[S] => Option[S])
     (alloc: Allocator)
     (implicit serk: Serializer[K], ord: Ordering[K], sers: Serializer[S], serv: Serializer[V])
-    extends Traversable[(K, V)]{
+    extends Traversable[(K, V)] {
   import Ordering.Implicits._
   import MapReduceBRTree._
 
@@ -66,29 +66,29 @@ class MapReduceBRTree[K, V, S]
     pointer
   }
 
-  def sync[A](f: => A) = alloc.sync(f)
-
   def +=(entry: (K, V)) = this ++= (entry :: Nil)
 
-  def ++=(entries: TraversableOnce[(K, V)]) = sync {
+  def ++=(entries: TraversableOnce[(K, V)]) = synchronized {
     val insertion = rootPointer.insert(entries.toList)
     if (insertion.destructive) rootPointer = insertion.buildRoot
   }
 
-  def foreach[U](f: ((K, V)) => U): Unit = sync {
+  def foreach[U](f: ((K, V)) => U): Unit = synchronized {
     doBetween(f, None, None)
   }
 
   def getBetween(low: Option[K], high: Option[K]): Traversable[(K, V)] = new Traversable[(K, V)] {
-    def foreach[U](f: ((K, V)) => U): Unit = sync(doBetween(f, low, high))
+    def foreach[U](f: ((K, V)) => U): Unit = synchronized(doBetween(f, low, high))
   }
 
   //FIXME: Test this
-  def summaryBetween(low: Option[K], high: Option[K]): Option[S] = sync {
+  def summaryBetween(low: Option[K], high: Option[K]): Option[S] = synchronized {
     rootPointer.summaryBetween(low, high)
   }
-  
+
   def summary = summaryBetween(None, None)
+
+  def close() = alloc.close
 
   private def doBetween[U](f: ((K, V)) => U, low: Option[K], high: Option[K]): Unit = {
     val queue = new PriorityQueue(64, kOrdering)

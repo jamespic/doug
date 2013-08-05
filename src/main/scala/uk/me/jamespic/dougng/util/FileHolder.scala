@@ -9,14 +9,10 @@ import FileChannel.MapMode._
  * Utility class to hold all state relevant to file. Simplifies synchronization and
  * garbage collection
  */
-private[util] class FileHolder(initialWindow: Long) extends Hibernatable {
+private[util] class FileHolder {
   var file: File = tryAndMaybeGc(File.createTempFile("data", ".dat"))
   var raf: RandomAccessFile = tryAndMaybeGc(new RandomAccessFile(file, "rw"))
   var channel: FileChannel = raf.getChannel()
-  var currentMap: MappedByteBuffer =
-    if(initialWindow > 0) {
-      channel.map(READ_WRITE, 0L, initialWindow)
-    } else null
   var hibernating = false
 
   file.deleteOnExit()
@@ -34,27 +30,7 @@ private[util] class FileHolder(initialWindow: Long) extends Hibernatable {
     }
   }
 
-  def hibernate() = synchronized {
-    if (!hibernating) {
-      currentMap = null
-      if (channel != null) channel.close()
-      if (raf != null) raf.close()
-      channel = null
-      raf = null
-      hibernating = true
-    }
-  }
-
-  def unhibernate() = synchronized {
-    if (hibernating) {
-      raf = tryAndMaybeGc(new RandomAccessFile(file, "rw"))
-      channel = raf.getChannel()
-      hibernating = false
-    }
-  }
-
-  def close() = synchronized {
-    currentMap = null
+  def close() = {
     if (channel != null) channel.close()
     if (raf != null) raf.close()
     if (file != null) file.delete()

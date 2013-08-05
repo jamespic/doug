@@ -14,7 +14,7 @@ object Allocator {
   }
 }
 
-trait Allocator extends Hibernatable {
+trait Allocator {
   type HandleType
   implicit val handleSerializer: Serializer[HandleType]
   val nullHandle: HandleType

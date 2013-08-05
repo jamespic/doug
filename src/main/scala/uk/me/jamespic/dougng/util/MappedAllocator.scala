@@ -9,17 +9,15 @@ object MappedAllocator {
   private val DefaultBlockSize = 16 * 1024 * 1024
 }
 
-class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends Allocator {
+class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends Allocator {self =>
   type HandleType = (Int, Int)
   val handleSerializer = implicitly[Serializer[HandleType]]
   val nullHandle = (-1, -1)
-  private val file = new FileHolder(0)
+  private val file = new FileHolder
   private val freeList = MMap.empty[Int, List[HandleType]]
   private val extents = ArrayBuffer.empty[Extent]
-  override def sync[B](f: => B) = file.sync(f)
-  def hibernate() = file.hibernate()
 
-  def apply(size: Int) = sync {
+  def apply(size: Int) = self.synchronized {
     require(size <= blockSize, s"Cannot allocate blocks larger than $blockSize")
     val handle = if (freeList contains size) {
       val s :: tail = freeList(size)
@@ -47,16 +45,16 @@ class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends
    * a valid block of disk storage, undefined behaviour may occur.
    */
 
-  def storage(handle: (Int, Int), size: Int) = sync {
+  def storage(handle: (Int, Int), size: Int) = self.synchronized {
     new MappedStorage(handle, size)
   }
 
-  def close = sync {
+  def close = self.synchronized {
     file.close
     freeList.clear
   }
 
-  override def toString = sync {
+  override def toString = self.synchronized {
     if (file.channel != null) {
       s"<MappedAllocator: File: ${file.file}, $fragmentation% fragmented>"
     } else {
@@ -70,7 +68,7 @@ class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends
     blockSize * (extents.size - 1) + extents.last.allocated
   }
 
-  def fragmentation = sync {
+  def fragmentation = self.synchronized {
     val freeSize = (freeList.map {case (size, list) => size.toLong * list.size.toLong}).sum
     val wasteSize = (extents.dropRight(1).map {e => blockSize - e.allocated}).sum
     100.0f * (freeSize + wasteSize) / limit
@@ -90,13 +88,10 @@ class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends
   class MappedStorage(h: (Int, Int), size: Int) extends Storage {
     private val extent = extents(h._1)
     private val start = h._2
-    private var valid = true
-    override def handle = sync {
-      checkValid
+    override def handle = self.synchronized {
       h
     }
 
-    private def checkValid = require(valid, "Use after free")
     private def checkBounds(off: Int, sz: Int) =
       require(off >= 0 && sz >= 0 && off + sz <= size,
           s"Offset $off, size $sz out of bounds - storage size is $size")
@@ -118,8 +113,7 @@ class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends
       this
     }
 
-    def write[A](off: Int, value: A)(implicit ser: Serializer[A]): Unit = sync {
-      checkValid
+    def write[A](off: Int, value: A)(implicit ser: Serializer[A]): Unit = self.synchronized {
       checkBounds(off, ser.size)
       val map = extent.map
       map.limit(start + off + ser.size)
@@ -127,8 +121,7 @@ class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends
       ser.serialize(value, map)
     }
 
-    def read[A](off: Int)(implicit ser: Serializer[A]): A = sync {
-      checkValid
+    def read[A](off: Int)(implicit ser: Serializer[A]): A = self.synchronized {
       checkBounds(off, ser.size)
       val map = extent.map
       map.limit(start + off + ser.size)
@@ -136,20 +129,14 @@ class MappedAllocator(blockSize: Int = MappedAllocator.DefaultBlockSize) extends
       ser.deserialize(map)
     }
 
-    def free: Unit = sync {
-      checkValid
-      valid = false
+    def free: Unit = self.synchronized {
       if (size > 0) {
         freeList += size -> (h :: freeList.getOrElse(size, Nil))
       }
     }
 
-    override def toString = sync {
-      if (valid) {
-        s"${MappedAllocator.this}.MappedStorage($h, $size)"
-      } else {
-        "<Invalid Channel Allocator>"
-      }
+    override def toString = self.synchronized {
+      s"${MappedAllocator.this}.MappedStorage($h, $size)"
     }
   }
 }
