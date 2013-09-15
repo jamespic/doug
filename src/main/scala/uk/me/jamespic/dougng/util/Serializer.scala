@@ -151,7 +151,7 @@ object Serializer extends LowPriorityImplicits {
     }
   }
 
-  class FixedCollectionSerializer[A, Col <: Traversable[A]]
+  class FixedCollectionSerializer[A, Col <% Traversable[A]]
       (n: Int)(implicit ser: Serializer[A], cbf: CanBuildFrom[Nothing, A, Col])
       extends Serializer[Col]{
     val size = n * ser.size
