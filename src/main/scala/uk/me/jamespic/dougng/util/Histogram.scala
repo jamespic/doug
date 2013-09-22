@@ -2,6 +2,8 @@ package uk.me.jamespic.dougng.util
 
 import scala.collection.mutable.ArrayBuffer
 import java.nio.ByteBuffer
+import scala.collection.immutable.SortedSet
+import scala.collection.immutable.SortedMap
 
 class Histogram private(val start: DoubleRep, val data: Array[Int]) {
   import Histogram._
@@ -31,6 +33,21 @@ class Histogram private(val start: DoubleRep, val data: Array[Int]) {
   }
 
   def nonZero = entries filter (_._2 != 0)
+  def size = data.last
+
+  override def toString = {
+    val e = entries.slice(0, highestNonZeroIndex + 1)
+    val rangeColLength = e.map(_._1.toString.length).max
+    val longestBar = e.map(_._2).max
+    val rows = for ((r, n) <- e) yield {
+      val range = r.toString.padTo(rangeColLength, ' ')
+      val bars = "#" * (n * stringBarWidth / longestBar)
+      s"$range: $bars"
+    }
+    rows.mkString("\n")
+  }
+
+  def percentile = new Percentile
 
   private def highestNonZeroIndex = {
     var i = 0
@@ -45,20 +62,44 @@ class Histogram private(val start: DoubleRep, val data: Array[Int]) {
     // don't want to expose a confusing API, so we make it package private
     Range(sig, sig + highestNonZeroIndex, exp)
   }
+
+  class Percentile private[Histogram] {
+    private case class Segment(startPerc: Double, endPerc: Double, startVal: Double, endVal: Double)
+    private val percentiles = {
+      val max = Histogram.this.size.toDouble
+      var counter = 0
+      val r = for ((r, c) <- nonZero) yield {
+        val startVal = r.from.toDouble
+        val endVal = r.to.toDouble
+        val startPerc = counter / max
+        counter += c
+        val endPerc = counter / max
+        startPerc -> Segment(startPerc, endPerc, startVal, endVal)
+      }
+      SortedMap(r:_*)
+    }
+    def apply(p: Double) = {
+      require(0.0 <= p && p <= 1.0)
+      val Segment(startPerc, endPerc, startVal, endVal) = percentiles.to(p).last._2
+      val segPos = (p - startPerc) / (endPerc - startPerc)
+      segPos * endVal + (1 - segPos) * startVal
+    }
+  }
 }
 
 object Histogram {
   val barsExponent = 6
   val bars = pow2(barsExponent).toInt
-  private def selectExponent(min: Double, max: Double): Int = {
+  val stringBarWidth = 40
+  def selectExponent(min: Double, max: Double): Int = {
     val minRep = DoubleRep(min)
     val maxRep = DoubleRep(max)
-    val barRep = DoubleRep((max - min) / bars)
+    val barRep = DoubleRep((max - min) / (bars - 1))
     val idealExponent = barRep.logRoundUp
     idealExponent max minRep.minExponent max maxRep.minExponent
   }
 
-  private def selectRange(data: Traversable[Histogram]) = {
+  def selectRange(data: Traversable[Histogram]) = {
     val range = data.view map (_.range) reduce (_ ++ _)
     val Range(min, max, exp) = range
     val barRep = DoubleRep((max - min), exp - barsExponent)

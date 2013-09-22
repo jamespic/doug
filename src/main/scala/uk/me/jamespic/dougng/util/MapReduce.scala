@@ -4,6 +4,13 @@ object MapReduce {
   def sum[A](trav: Traversable[A])(implicit num: Numeric[A]): Option[A] = {
     trav.reduceOption[A]((x, y) => num.mkNumericOps(x) + y) // Stupid string implicits
   }
+  def memory[K: Ordering, V, S](implicit algo: MapReduceAlgorithm[V, S]) = {
+    MapReduceAATree.empty[K, V, S](algo.mapReduce, algo.reReduce)
+  }
+
+  def disk[K: Ordering : Serializer, V: Serializer, S: Serializer](implicit algo: MapReduceAlgorithm[V, S], alloc: Allocator) = {
+    new MapReduceBRTree[K, V, S](algo.mapReduce, algo.reReduce)(alloc)
+  }
 }
 
 object MapReduceAlgorithm {
@@ -17,14 +24,6 @@ object MapReduceAlgorithm {
       	Some(((start: T) /: l){_ ++ _})
       }
   )
-
-  def memory[K: Ordering, V, S](implicit algo: MapReduceAlgorithm[V, S]) = {
-    MapReduceAATree.empty[K, V, S](algo.mapReduce, algo.reReduce)
-  }
-
-  def disk[K: Ordering : Serializer, V: Serializer, S: Serializer](implicit algo: MapReduceAlgorithm[V, S], alloc: Allocator) = {
-    new MapReduceBRTree[K, V, S](algo.mapReduce, algo.reReduce)(alloc)
-  }
 }
 
 case class MapReduceAlgorithm[V, S](mapReduce: Traversable[V] => Option[S],

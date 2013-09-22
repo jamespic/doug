@@ -65,32 +65,33 @@ object Serializer extends LowPriorityImplicits {
   }
 
   class OptionSerializer[A: Serializer] extends MultiSerializer[Option[A]](
-      (0, None.getClass, NoneSerializer),
-      (1, classOf[Some[A]], caseClassSerializer(Some.apply[A] _, Some.unapply[A] _))
+      (None.getClass, NoneSerializer),
+      (classOf[Some[A]], caseClassSerializer(Some.apply[A] _, Some.unapply[A] _))
   )
 
   implicit def optionSerializer[A: Serializer] = new OptionSerializer[A]
 
   class EitherSerializer[A, B](implicit sera: Serializer[A], serb: Serializer[B])
       extends MultiSerializer[Either[A, B]] (
-          (0, classOf[Left[A, B]], caseClassSerializer(Left.apply[A, B] _, Left.unapply[A, B] _)),
-          (1, classOf[Right[A, B]], caseClassSerializer(Right.apply[A, B] _, Right.unapply[A, B] _))
+          (classOf[Left[A, B]], caseClassSerializer(Left.apply[A, B] _, Left.unapply[A, B] _)),
+          (classOf[Right[A, B]], caseClassSerializer(Right.apply[A, B] _, Right.unapply[A, B] _))
       )
 
   implicit def eitherSerializer[A: Serializer, B: Serializer] = new EitherSerializer[A, B]
 
-  class MultiSerializer[Parent](mapping: (Byte, Class[_ <: Parent], Serializer[_ <: Parent])*)
+  class MultiSerializer[Parent](mapping: (Class[_ <: Parent], Serializer[_ <: Parent])*)
       extends Serializer[Parent] {
-    private val maxSize = mapping.map(_._3.size).max
+    private val maxSize = mapping.map(_._2.size).max
     val size = 1 + maxSize
     private def skipSize(ser: Serializer[_]) = 0 max (maxSize - ser.size)
 
     def serialize(value: Parent, buf: ByteBuffer) = {
-      mapping find {
-        case (indicator, cls, ser) => cls.isInstance(value)
-      } map {
-        case (indicator, cls, ser) =>
-          buf.put(indicator)
+      val i = mapping indexWhere {
+        case (cls, ser) => cls.isInstance(value)
+      }
+      mapping.lift(i) map {
+        case (cls, ser) =>
+          buf.put(i.toByte)
           ser.asInstanceOf[Serializer[Any]].serialize(value, buf)
           buf.position(buf.position + skipSize(ser))
       } orElse {
@@ -100,10 +101,8 @@ object Serializer extends LowPriorityImplicits {
 
     def deserialize(buf: ByteBuffer) = {
       val firstByte = buf.get
-      mapping find {
-        case (indicator, cls, ser) => indicator == firstByte
-      } map {
-        case (indicator, cls, ser) =>
+      mapping.lift(firstByte.toInt) map {
+        case (cls, ser) =>
           val ret = ser.deserialize(buf)
           buf.position(buf.position + skipSize(ser))
           ret

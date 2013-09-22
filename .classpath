@@ -18,6 +18,7 @@
   <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.typesafe/config/bundles/config-1.0.0.jar" sourcepath="/home/james/.ivy2/cache/com.typesafe/config/srcs/config-1.0.0-sources.jar"></classpathentry>
   <classpathentry kind="lib" path="/home/james/.ivy2/cache/com.chuusai/shapeless_2.10/jars/shapeless_2.10-1.2.4.jar" sourcepath="/home/james/.ivy2/cache/com.chuusai/shapeless_2.10/srcs/shapeless_2.10-1.2.4-sources.jar"></classpathentry>
   <classpathentry kind="lib" path="/home/james/.ivy2/cache/org.scalaz/scalaz-core_2.10/bundles/scalaz-core_2.10-7.0.1.jar" sourcepath="/home/james/.ivy2/cache/org.scalaz/scalaz-core_2.10/srcs/scalaz-core_2.10-7.0.1-sources.jar"></classpathentry>
+  <classpathentry kind="lib" path="/home/james/.ivy2/cache/org.apache.commons/commons-math3/jars/commons-math3-3.2.jar" sourcepath="/home/james/.ivy2/cache/org.apache.commons/commons-math3/srcs/commons-math3-3.2-sources.jar"></classpathentry>
   <classpathentry kind="lib" path="/home/james/.ivy2/cache/org.scala-lang/scala-reflect/jars/scala-reflect-2.10.1.jar" sourcepath="/home/james/.ivy2/cache/org.scala-lang/scala-reflect/srcs/scala-reflect-2.10.1-sources.jar"></classpathentry>
   <classpathentry kind="lib" path="/home/james/.ivy2/cache/org.scalatest/scalatest_2.10/jars/scalatest_2.10-2.0.M5b.jar" sourcepath="/home/james/.ivy2/cache/org.scalatest/scalatest_2.10/srcs/scalatest_2.10-2.0.M5b-sources.jar"></classpathentry>
   <classpathentry path="org.eclipse.jdt.launching.JRE_CONTAINER" kind="con"></classpathentry>

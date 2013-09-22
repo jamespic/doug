@@ -22,13 +22,21 @@ class HistogramTest extends FunSpec with ShouldMatchers with GivenWhenThen {
       instance.nonZero.head._1.to.toDouble should be >= 0.0
     }
     it("should work in a MapReduce setting") {
-      implicit val alloc = Allocator()
-      var instance = MapReduceAlgorithm.memory[Long, Double, Histogram]
+      var instance = MapReduce.memory[Long, Double, Histogram]
       for (i <- 1 to 100) instance += i.toLong -> i.toDouble
       val summary = instance.summary.get
       summary.nonZero.size should be >= 32
       summary.nonZero.last._1.from.toDouble should be <= 100.0
       summary.nonZero.head._1.to.toDouble should be >= 0.0
+    }
+    it("should work with large MapReduce datasets") {
+      implicit val alloc = Allocator()
+      val rand = new java.util.Random (0L)
+      var instance = MapReduce.disk[Long, Double, Histogram]
+      for (i <- 1 to 100000) instance += i.toLong -> rand.nextGaussian
+      val summary = instance.summary.get
+      summary.nonZero.size should be >= 32
+      alloc.close
     }
   }
 }
