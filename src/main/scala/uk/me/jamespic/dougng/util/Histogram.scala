@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 import scala.collection.immutable.SortedSet
 import scala.collection.immutable.SortedMap
 
-class Histogram private(val start: DoubleRep, val data: Array[Int]) {
+class Histogram private(private val start: DoubleRep, private val data: Array[Int]) {
   import Histogram._
   private def sig = start.significand
   private def exp = start.exponent
@@ -23,12 +23,14 @@ class Histogram private(val start: DoubleRep, val data: Array[Int]) {
 
   private def countLessThan(limit: DoubleRep) = {
     require(limit.exponent >= start.exponent)
-    if (limit < start) 0
+    if (limit + 1 < start) 0
     else if (limit >= end) data.last
     else {
-      val normalisedLimit = limit withExponent start.exponent
+      val normalisedLimit = ((limit + 1) withExponent start.exponent) + (-1)
       val index = normalisedLimit.significand - start.significand
-      data(index.toInt)
+      if (index < 0) 0
+      else if (index >= bars) data.last
+      else data(index.toInt)
     }
   }
 
