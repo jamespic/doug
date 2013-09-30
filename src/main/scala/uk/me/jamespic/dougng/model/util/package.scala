@@ -79,6 +79,7 @@ package object util {
           f(iRecord.asInstanceOf[A])
           true
         }
+        override def end = ()
       })
     }
   }
