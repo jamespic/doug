@@ -8,9 +8,8 @@ import scala.collection.JavaConversions._
 
 object MapReduceBRTree {
   import Ordering.Implicits._
-  // Make these vals once we've optimised them
-  var DefaultFanout = 16
-  var DefaultBufferSize = 32
+  private val DefaultFanout = 20
+  private val DefaultBufferSize = 40
 
   private def mergeLists[T: Ordering](s1: List[T], s2: List[T]) = {
     recRevMerge(s1, s2, Nil).reverse
