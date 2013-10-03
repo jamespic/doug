@@ -1,12 +1,10 @@
-package uk.me.jamespic.dougng.model.datamanager
+package uk.me.jamespic.dougng.model.datamanagement
 
 import akka.actor.Actor
-import com.orientechnologies.orient.core.command.OBasicCommandContext
+import com.orientechnologies.orient.core.command.{OBasicCommandContext,OCommandContext}
 import com.orientechnologies.orient.core.sql.filter.{OSQLTarget, OSQLFilter}
 import scala.collection.JavaConversions._
 import com.orientechnologies.orient.core.record.impl.ODocument
-import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx
-import com.orientechnologies.orient.core.command.OCommandContext
 import scala.collection.mutable.{Map => MMap}
 import uk.me.jamespic.dougng.util.MutableMapReduce
 import uk.me.jamespic.dougng.util.DetailedStats
@@ -14,6 +12,9 @@ import uk.me.jamespic.dougng.model.Dataset
 import scala.util.control.NonFatal
 import akka.actor.ActorRef
 import scala.concurrent.duration._
+import resource._
+import com.orientechnologies.orient.core.db.document.ODatabaseDocument
+import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 
 object DatasetActor {
   object ImmutableContext extends OBasicCommandContext {
@@ -25,25 +26,43 @@ object DatasetActor {
   private def notifyLaterTime = 1 second // FIXME: This should be configurable
 
   private case object NotificationTime
+
+  def constructor(dataset: Dataset, dataFactory: => DataStore)(pool: ReplacablePool) = {
+    new DatasetActor(dataset, dataFactory, pool)
+  }
 }
 
-class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
+class DatasetActor(private var dataset: Dataset, dataFactory: => DataStore, pool: ReplacablePool) extends Actor {
   import DatasetActor._
   private var dataOpt: Option[DataStore] = None
   private var listeners = Set.empty[ActorRef]
   private var notificationPending = false
 
-  private val classInsertHandler = try {
-    val parsed = new OSQLTarget(dataset.table, null, null)
-    if (parsed.getTargetClasses() != null) {
-      Some(new ClassInsertHandler(parsed.getTargetClasses.values.toSet))
-    } else None
-  } catch {
-    case NonFatal(_) => None // If we fail, for any reason, no class browsing
+  private var classInsertHandler: Option[ClassInsertHandler] = None
+
+  private def updateRecord(db: OObjectDatabaseTx) {
+    dataset = db.reload(dataset)
+  }
+
+  private def updateClassInsertHandler {
+    classInsertHandler = try {
+      val parsed = new OSQLTarget(dataset.table, null, null)
+      if (parsed.getTargetClasses() != null) {
+        Some(new ClassInsertHandler(parsed.getTargetClasses.values.toSet))
+      } else None
+    } catch {
+      case NonFatal(_) => None // If we fail, for any reason, no class browsing
+    }
+  }
+
+  override def postRestart(t: Throwable) = {
+    super.postRestart(t)
+    context.parent ! RequestPermissionToUpdate
   }
 
   def receive = {
     case update: TablesUpdated => handleUpdate(update)
+    case PermissionToUpdate => initialise
     case DocumentInserted(doc) => handleInsert(doc)
     case ListenTo => listenTo
     case UnlistenTo => listeners -= sender
@@ -53,6 +72,14 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
     case GetInRange(rows, from, to) => getInRange(rows, from, to)
     case GetAllInRange(from, to) => getInRange(data.rows, from, to)
     case NotificationTime => notifyListeners
+    case WhichTablesAreYouInterestedIn => whichTables
+  }
+
+  private def whichTables {
+    classInsertHandler match {
+      case None => sender ! AllOfThem
+      case Some(handler) => sender ! TheseTables(handler.classes)
+    }
   }
 
   private def notifyListeners {
@@ -74,7 +101,7 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
     sender ! DataUpdatedNotification
   }
 
-  private def summaries(rows: Seq[String], ranges: Seq[(Long,Long)]) {
+  private def summaries(rows: Iterable[String], ranges: Iterable[(Long,Long)]) {
     val result = for (row <- rows) yield {
       val mrData = data(row)
       val rowData = for (r @ (low, high) <- ranges) yield {
@@ -85,7 +112,7 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
     sender ! Summaries(result.toMap)
   }
 
-  private def getInRange(rows: Seq[String], from: Long, to: Long) {
+  private def getInRange(rows: Iterable[String], from: Long, to: Long) {
     val result = for (row <- rows) yield row -> data(row).getBetween(from, to).toSeq
     sender ! Ranges(result.toMap)
   }
@@ -98,18 +125,22 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
     }
   }
 
-  private def regenerate(db: ODatabaseDocumentTx) {
+  private def regenerate {
     invalidate
-    val context = new OBasicCommandContext()
-    val browser = browse(db, context)
-    val compiled = new Compiled(context)
-
     var updated = false
+    for (db <- pool) {
+      updateRecord(db)
+      updateClassInsertHandler
 
-    for {doc <- browser} {
-      if (compiled.maybeInsert(doc)) updated = true
+      val context = new OBasicCommandContext()
+      val browser = browse(db.getUnderlying, context)
+      val compiled = new Compiled(context)
+
+
+      for {doc <- browser} {
+        if (compiled.maybeInsert(doc)) updated = true
+      }
     }
-
     if (updated) notifyListeners
   }
 
@@ -123,11 +154,16 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
     }
   }
 
+  private def initialise {
+    regenerate
+    sender ! AllDone
+  }
+
   private def handleUpdate(update: TablesUpdated) {
-    val TablesUpdated(tables, db) = update
+    val TablesUpdated(tables) = update
     classInsertHandler match {
-      case None => regenerate(db)
-      case Some(handler) if handler handles tables => regenerate(db)
+      case None => regenerate
+      case Some(handler) if handler handles tables => regenerate
       case _ => //  Do nothing
     }
     sender ! AllDone
@@ -140,7 +176,7 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
 
   override def postStop = invalidate
 
-  private def browse(db: ODatabaseDocumentTx, context: OCommandContext) = {
+  private def browse(db: ODatabaseDocument, context: OCommandContext) = {
     val parsed = new OSQLTarget(dataset.table, context, null)
 
     if (parsed.getTargetClasses() != null) {
@@ -150,7 +186,7 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
       parsed.getTargetRecords().view.map (_.getRecord())
     } else if (parsed.getTargetClusters() != null) {
       for (cluster <- parsed.getTargetClusters().values().view;
-           doc <- (db.browseCluster(cluster): Iterable[ODocument])) yield doc
+           doc <- (db.browseCluster[ODocument](cluster): Iterable[ODocument])) yield doc
     } else if (parsed.getTargetIndex() != null) {
       db.getMetadata().getIndexManager().getIndex(parsed.getTargetIndex()).getEntriesBetween(null, null): Iterable[ODocument]
     } else {
@@ -161,8 +197,10 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
   private class ClassInsertHandler(val classes: Set[String]) extends Compiled(null) {
     def handles(tables: Set[String]) = (tables & classes).nonEmpty
     override def maybeInsert(doc: ODocument) = {
-      if (classes contains doc.getClassName()) {
-        super.maybeInsert(doc)
+      if (classes contains doc.getClassName().toUpperCase()) {
+        for (db <- pool) yield {
+          super.maybeInsert(doc)
+        }
       } else false
     }
   }
@@ -174,7 +212,8 @@ class DatasetActor(dataset: Dataset, dataFactory: => DataStore) extends Actor {
     val metricComp = compile(dataset.metric, context)
 
     def maybeInsert(doc: ODocument): Boolean = {
-      if (filter.evaluate(doc, doc, context) == java.lang.Boolean.TRUE) {
+      val filterValue = filter.evaluate(doc, doc, context)
+      if (filterValue == java.lang.Boolean.TRUE || filterValue == null) {
         val rowName = nameComp.evaluate(doc, doc, context).toString
         val ts = tsComp.evaluate(doc, doc, context) match {
           case l: java.lang.Long => l.longValue

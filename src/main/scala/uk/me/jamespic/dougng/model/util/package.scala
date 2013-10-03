@@ -67,9 +67,19 @@ package object util {
     }
   }
 
+  def deregisterClasses(implicit db: OObjectDatabaseTx) {
+    for (cls <- modelClasses) {
+      deregisterClass(cls)
+    }
+  }
+
   def registerClass(cls: Class[_])(implicit db: OObjectDatabaseTx) = {
     OObjectEntityEnhancer.getInstance().registerClassMethodFilter(cls, ScalaObjectMethodFilter)
-    val regCls = db.getEntityManager().registerEntityClass(cls)
+    db.getEntityManager().registerEntityClass(cls)
+  }
+
+  def deregisterClass(cls: Class[_])(implicit db: OObjectDatabaseTx) = {
+    db.getEntityManager().deregisterEntityClass(cls)
   }
 
   class QueryTraversable[A](handler: OCommandResultListener => Unit) extends Traversable[A] {

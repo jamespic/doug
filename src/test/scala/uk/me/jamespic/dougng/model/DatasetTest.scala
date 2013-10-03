@@ -9,6 +9,7 @@ import uk.me.jamespic.dougng.model.util._
 import java.util.Date
 
 class DatasetTest extends FunSpec with ShouldMatchers with OrientMixin with GivenWhenThen {
+  /*
   def createTestData() = {
     def newSimpleDoc(time: Long, value: Double) = {
       val doc:ODocument = docDb.newInstance("Sample")
@@ -145,4 +146,5 @@ class DatasetTest extends FunSpec with ShouldMatchers with OrientMixin with Give
       row(90000L) should be (80.0 plusOrMinus 0.0001)
     }
   }
+  */
 }
