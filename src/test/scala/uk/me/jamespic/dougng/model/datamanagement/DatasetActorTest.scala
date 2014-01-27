@@ -33,10 +33,11 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
   describe("A DatasetActor") {
 	it("should allow us to query a simple dataset") {
 	  // Create example dataset - doesn't need to be in the DB
-	  val dataset = new Dataset
+	  var dataset = new Dataset
 	  dataset.metric = "value"
 	  dataset.rowName = "name"
 	  dataset.whereClause = "name = 'MyRow'"
+	  dataset = db.save(dataset)
 
 	  // Put some simple data in the database
 	  for (i <- 1L to 100L) {
@@ -48,19 +49,11 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  val pool = new ReplacablePool
 	  pool.url = dbUri
 
-	  val instance = system.actorOf(Props(new DatasetActor(dataset, DataStore.memory, pool)))
-
-	  // Pre-initialisation, it doesn't know what tables it wants
-	  instance ! WhichTablesAreYouInterestedIn
-	  expectMsg(5 seconds, AllOfThem)
+	  val instance = system.actorOf(Props(new DatasetActor(dataset.id, DataStore.memory, pool)))
 
 	  // Initialise
-	  instance ! PermissionToUpdate
+	  instance ! PleaseUpdate
 	  expectMsg(5 seconds, AllDone)
-
-	  // It now knows what tables it expects
-	  instance ! WhichTablesAreYouInterestedIn
-	  expectMsg(5 seconds, TheseTables(Set("SAMPLE")))
 
 	  // Let's get some metadata
 	  instance ! GetMetadata
@@ -76,12 +69,26 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  instance ! GetAllInRange(25L, 50L)
 	  expectMsg(Ranges(Map("MyRow" -> (25L to 50L map (x => (x, x.toDouble))))))
 
-	  val newSample = Sample("MyRow", new Date(101L))
-	  newSample("value") = 101.0
+	  val newSample = for (db <- pool) yield {
+	    val sample = Sample("MyRow", new Date(101L))
+	    sample("value") = 101.0
+	    sample.save
+	    sample
+	  }
 	  instance ! ListenTo
-	  instance ! DocumentInserted(newSample)
-	  //Thread.sleep(86400000L)
+	  instance ! DocumentsInserted(Seq(newSample))
 	  expectMsgAllOf(5 seconds, AllDone, DataUpdatedNotification)
+
+	  instance ! GetAllInRange(101L, 101L)
+	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0))))
+
+	  instance ! PleaseUpdate
+	  expectMsgAllOf(5 seconds, AllDone, DataUpdatedNotification)
+
+	  instance ! UnlistenTo
+	  instance ! PleaseUpdate
+	  expectMsg(5 seconds, AllDone)
+	  expectNoMsg(5 seconds)
 
 	  instance ! GetAllInRange(101L, 101L)
 	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0))))

@@ -1,9 +1,7 @@
 package uk.me.jamespic.dougng.model.datamanagement
-
-import uk.me.jamespic.dougng.model.Dataset
 import com.orientechnologies.orient.core.record.impl.ODocument
 import uk.me.jamespic.dougng.util.DetailedStats
-import akka.actor.Props
+import akka.actor.{Props, ActorRef}
 
 /*
  * Message to create a data dependent actor. This is an actor that requires a
@@ -12,23 +10,26 @@ import akka.actor.Props
  * and once they receive permission (via a PermissionToUpdate), they have permission until
  * they relinquish it with an UpdateComplete.
  */
-case class CreateDataDependentActor(constructor: ReplacablePool => Props)
+case class CreateDataDependentActor(constructor: ReplacablePool => Props, name: String)
+case class ActorCreated(actor: ActorRef, name: String)
+case class GetDataset(recordId: String)
 
 /*
  * Message informing a parent that a DatasetActor thinks it needs to update itself,
  * probably because it was restarted
  */
 case object RequestPermissionToUpdate
-
+case object RequestExclusiveDatabaseAccess
 
 /*
  * Messages from Documents to DatasetActors, informing them of data changes, and allowing
  * them to act on them
  */
-sealed trait PermissionToUpdate
-case class TablesUpdated(tables: Set[String]) extends PermissionToUpdate
-case class DocumentInserted(doc: ODocument) extends PermissionToUpdate
-case object PermissionToUpdate extends PermissionToUpdate
+sealed trait PleaseUpdate
+case class DocumentsInserted(doc: Traversable[ODocument]) extends PleaseUpdate
+case class DatasetUpdate(idsAffected: Set[String]) extends PleaseUpdate
+case class PresentationUpdate(idsAffected: Set[String]) extends PleaseUpdate
+case object PleaseUpdate extends PleaseUpdate
 
 /*
  * Messages from DatasetActors to Documents, either acknowledging requests,
@@ -37,15 +38,6 @@ case object PermissionToUpdate extends PermissionToUpdate
 sealed trait UpdateComplete
 case object AllDone extends UpdateComplete
 case object RemindMeLater extends UpdateComplete
-
-/*
- * Messages between DatasetActors and Documents, discussing which tables
- * they're interested in. This helps avoid telling DatasetActors about
- * Documents they don't care about
- */
-case object WhichTablesAreYouInterestedIn
-case object AllOfThem
-case class TheseTables(tables: Set[String])
 
 /*
  * Messages between DatasetActors and other actors interested in their data
@@ -61,4 +53,5 @@ case class GetAllInRange(from: Long, to: Long)
 case class Metadata(min: Long, max: Long, rows: Set[String])
 case class Summaries(result: Map[String, Map[(Long, Long), Option[DetailedStats]]])
 case class Ranges(result: Map[String, Iterable[(Long, Double)]])
-
+case object GetLastError
+case class LastError(ex: Option[Throwable])
