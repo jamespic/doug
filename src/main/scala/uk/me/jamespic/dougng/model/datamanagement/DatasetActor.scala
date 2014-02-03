@@ -81,13 +81,13 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
 
     case ListenTo => listenTo
     case UnlistenTo => listeners -= sender
-    case GetMetadata => sender ! Metadata(data.min, data.max, data.rows)
-    case GetSummaries(rows, ranges) => summaries(rows, ranges)
-    case GetAllSummaries(ranges) => summaries(data.rows, ranges)
-    case GetInRange(rows, from, to) => getInRange(rows, from, to)
-    case GetAllInRange(from, to) => getInRange(data.rows, from, to)
+    case GetMetadata(corrId) => sender ! Metadata(data.min, data.max, data.rows, corrId)
+    case GetSummaries(rows, ranges, corrId) => summaries(rows, ranges, corrId)
+    case GetAllSummaries(ranges, corrId) => summaries(data.rows, ranges, corrId)
+    case GetInRange(rows, from, to, corrId) => getInRange(rows, from, to, corrId)
+    case GetAllInRange(from, to, corrId) => getInRange(data.rows, from, to, corrId)
     case NotificationTime => notifyListeners
-    case GetLastError => LastError(lastError)
+    case GetLastError(corrId) => LastError(lastError, corrId)
     case Terminated(listener) => listeners -= listener
   }
 
@@ -111,7 +111,7 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
     sender ! DataUpdatedNotification
   }
 
-  private def summaries(rows: Iterable[String], ranges: Iterable[(Long,Long)]) {
+  private def summaries(rows: Iterable[String], ranges: Iterable[(Long,Long)], corrId: Any) {
     val result = for (row <- rows) yield {
       val mrData = data(row)
       val rowData = for (r @ (low, high) <- ranges) yield {
@@ -119,12 +119,12 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
       }
       row -> rowData.toMap
     }
-    sender ! Summaries(result.toMap)
+    sender ! Summaries(result.toMap, corrId)
   }
 
-  private def getInRange(rows: Iterable[String], from: Long, to: Long) {
+  private def getInRange(rows: Iterable[String], from: Long, to: Long, corrId: Any) {
     val result = for (row <- rows) yield row -> data(row).getBetween(from, to).toSeq
-    sender ! Ranges(result.toMap)
+    sender ! Ranges(result.toMap, corrId)
   }
 
   private def data = {

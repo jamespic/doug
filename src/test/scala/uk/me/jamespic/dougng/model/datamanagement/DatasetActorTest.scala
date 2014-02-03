@@ -56,18 +56,19 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  expectMsg(5 seconds, AllDone)
 
 	  // Let's get some metadata
-	  instance ! GetMetadata
-	  expectMsg(5 seconds, Metadata(1L, 100L, Set("MyRow")))
+	  instance ! GetMetadata("req1")
+	  expectMsg(5 seconds, Metadata(1L, 100L, Set("MyRow"), "req1"))
 
 	  // And some data
-	  instance ! GetAllSummaries(Seq((1L, 10L)))
+	  instance ! GetAllSummaries(Seq((1L, 10L)), "req2")
 	  val summary = expectMsgType[Summaries](5 seconds)
+	  summary.corrId should equal("req2")
 	  val rowMap = summary.result("MyRow").toMap
 	  rowMap((1L, 10L)).get.getSum should be (55.0 plusOrMinus 0.1)
 
 	  // Some more data, just for fun
-	  instance ! GetAllInRange(25L, 50L)
-	  expectMsg(Ranges(Map("MyRow" -> (25L to 50L map (x => (x, x.toDouble))))))
+	  instance ! GetAllInRange(25L, 50L, "req3")
+	  expectMsg(Ranges(Map("MyRow" -> (25L to 50L map (x => (x, x.toDouble)))), "req3"))
 
 	  val newSample = for (db <- pool) yield {
 	    val sample = Sample("MyRow", new Date(101L))
@@ -79,8 +80,8 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  instance ! DocumentsInserted(Seq(newSample))
 	  expectMsgAllOf(5 seconds, AllDone, DataUpdatedNotification)
 
-	  instance ! GetAllInRange(101L, 101L)
-	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0))))
+	  instance ! GetAllInRange(101L, 101L, "req4")
+	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0)), "req4"))
 
 	  instance ! PleaseUpdate
 	  expectMsgAllOf(5 seconds, AllDone, DataUpdatedNotification)
@@ -90,8 +91,8 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  expectMsg(5 seconds, AllDone)
 	  expectNoMsg(5 seconds)
 
-	  instance ! GetAllInRange(101L, 101L)
-	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0))))
+	  instance ! GetAllInRange(101L, 101L, "req5")
+	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0)), "req5"))
 	}
   }
 }

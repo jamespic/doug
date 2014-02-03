@@ -18,19 +18,26 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
   private var record: Option[TimeGraph] = None
   private var receivedDatasets = Map.empty[String, DatasetInfo]
   private var graphData: Table = SortedMap.empty
+  private var version = 0L
 
   override def receive = super.receive orElse {
-    case PleaseUpdate => initialise
+    case x: PleaseUpdate => handleDataUpdate(x)
     case ActorCreated(actor, DatasetName(rid)) => handleReceivedDataset(rid, actor)
     case data: Metadata => handleMetadata(data)
     case data: Summaries => handleData(data)
     case DataUpdatedNotification => dataUpdated
   }
 
+  private def handleDataUpdate(msg: PleaseUpdate) = msg match {
+    case PleaseUpdate => initialise
+    case DatasetUpdate(ids) if ((ids & (receivedDatasets.keySet + recordId)).nonEmpty) => initialise
+    case _ => context.parent ! AllDone
+  }
+
   private def handleReceivedDataset(rid: String, actor: ActorRef) = {
     if (receivedDatasets contains rid) {
       receivedDatasets(rid).actor = Some(actor)
-      actor ! GetMetadata
+      actor ! GetMetadata(version)
       actor ! ListenTo
     }
   }
@@ -45,32 +52,34 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
         ds.id -> new DatasetInfo()
       }).toMap
     }
+    context.parent ! AllDone
   }
 
   def clearOldData = {
     for (dsInfo <- receivedDatasets.values; actor <- dsInfo.actor) actor ! UnlistenTo
+    version += 1L
   }
 
   private def handleMetadata(data: Metadata) = {
     val DatasetName(rid) = sender.path.name
-    if (receivedDatasets contains rid) {
+    if ((receivedDatasets contains rid) && (data.corrId == version)) {
       receivedDatasets(rid).metadata = Some(data)
     }
     if (receivedDatasets.values.forall(_.metadata != None)) startBuildingDataset
   }
 
   private def handleData(data: Summaries) = {
-    val Summaries(result) = data
+    val Summaries(result, _) = data
     val DatasetName(rid) = sender.path.name
-    if (receivedDatasets contains rid) {
-      receivedDatasets(rid).data = result
+    if ((receivedDatasets contains rid) && (data.corrId == version)) {
+      receivedDatasets(rid).data = Some(result)
     }
-    rebuildGraphData
+    if (receivedDatasets.values.forall(_.data != None)) rebuildGraphData
   }
 
   private def rebuildGraphData = {
     graphData = SortedMap.empty
-    for ((rid, dsInfo) <- receivedDatasets; (row, rowData) <- dsInfo.data) {
+    for ((rid, dsInfo) <- receivedDatasets; data <- dsInfo.data; (row, rowData) <- data) {
       val isMaxDataset = record.get.maxDatasets contains rid
       val tidiedRowData = for ((range, stats) <- rowData; s <- stats) yield {
         (range, if (isMaxDataset) s.getMax else s.getMean)
@@ -83,7 +92,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
   }
 
   private def dataUpdated = {
-    sender ! GetMetadata
+    sender ! GetMetadata(version)
   }
 
   private def startBuildingDataset = {
@@ -96,12 +105,8 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
     for (dsInfo <- receivedDatasets.values) {
       val actor = dsInfo.actor.get
       val rows = dsInfo.metadata.get.rows
-      actor ! GetSummaries(rows, ranges)
+      actor ! GetSummaries(rows, ranges, version)
     }
-  }
-
-  protected def onSubscribe = {
-    sender ! DataChanged(graphData)
   }
 
   override def preStart = {
@@ -111,5 +116,5 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
 
   private class DatasetInfo(var actor: Option[ActorRef] = None,
       var metadata: Option[Metadata] = None,
-      var data: Map[String, Map[(Long, Long), Option[DetailedStats]]] = Map.empty)
+      var data: Option[Map[String, Map[(Long, Long), Option[DetailedStats]]]] = None)
 }

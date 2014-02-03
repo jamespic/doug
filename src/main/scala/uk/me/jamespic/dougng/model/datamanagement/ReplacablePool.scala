@@ -43,7 +43,7 @@ class ReplacablePool {
   private def withWriteLock[X] = withLock[X](lock.writeLock) _
   private def withReadLock[X] = withLock[X](lock.writeLock) _
 
-  private def withLock[X](l: Lock)(f: => X) = {
+  private def withLock[X](l: Lock)(f: => X) = scala.concurrent.blocking {
     l.lock()
     try f
     finally l.unlock()

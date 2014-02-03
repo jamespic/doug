@@ -28,9 +28,10 @@ class SubscribableVariableTest(_system: ActorSystem) extends TestKit(_system) wi
       instance ! Emit("message 1")
       expectNoMsg
 
-      instance ! Subscribe
+      instance ! Subscribe(None)
+      expectMsg(DataChanged(0L, "message 1"))
       instance ! Emit("message 2")
-      expectMsg(DataChanged("message 2"))
+      expectMsg(DataChanged(1L, "message 2"))
 
       instance ! Unsubscribe
       instance ! Emit("message 3")
@@ -48,7 +49,7 @@ class SubscribableVariableTest(_system: ActorSystem) extends TestKit(_system) wi
 
       val instance = system.actorOf(Props[TestSubscribableVariable])
 
-      instance.tell(Subscribe, fakeActor)
+      instance.tell(Subscribe(None), fakeActor)
       fakeActor ! Kill
       expectMsgClass(classOf[Terminated])
 
@@ -62,9 +63,24 @@ class SubscribableVariableTest(_system: ActorSystem) extends TestKit(_system) wi
       val adapter = instance map {
         case x: String => x.toLong
       }
-      adapter ! Subscribe
+      adapter ! Subscribe(None)
       instance ! Emit("12")
-      expectMsg(DataChanged(12L))
+      expectMsg(DataChanged(0L, 12L))
+    }
+
+    it("should only emit an introductory event, if the new listener has not seen it") {
+      val instance = system.actorOf(Props[TestSubscribableVariable])
+
+      instance ! Emit("message")
+      instance ! Subscribe(Some(0L))
+      expectNoMsg
+
+      instance ! Emit("message 2")
+      expectMsg(DataChanged(1L, "message 2"))
+
+      instance ! Unsubscribe
+      instance ! Subscribe(Some(0L))
+      expectMsg(DataChanged(1L, "message 2"))
     }
   }
 }

@@ -22,7 +22,7 @@ case object RequestPermissionToUpdate
 case object RequestExclusiveDatabaseAccess
 
 /*
- * Messages from Documents to DatasetActors, informing them of data changes, and allowing
+ * Messages from Database to Data Dependent Actors, informing them of data changes, and allowing
  * them to act on them
  */
 sealed trait PleaseUpdate
@@ -32,7 +32,7 @@ case class PresentationUpdate(idsAffected: Set[String]) extends PleaseUpdate
 case object PleaseUpdate extends PleaseUpdate
 
 /*
- * Messages from DatasetActors to Documents, either acknowledging requests,
+ * Messages from Data Dependent Actors to Database, either acknowledging requests,
  * or requesting to be notified when all changes are complete.
  */
 sealed trait UpdateComplete
@@ -45,13 +45,13 @@ case object RemindMeLater extends UpdateComplete
 case object ListenTo
 case object UnlistenTo
 case object DataUpdatedNotification
-case object GetMetadata
-case class GetAllSummaries(ranges: Iterable[(Long, Long)])
-case class GetSummaries(rows: Iterable[String], ranges: Iterable[(Long, Long)])
-case class GetInRange(rows: Iterable[String], from: Long, to: Long)
-case class GetAllInRange(from: Long, to: Long)
-case class Metadata(min: Long, max: Long, rows: Set[String])
-case class Summaries(result: Map[String, Map[(Long, Long), Option[DetailedStats]]])
-case class Ranges(result: Map[String, Iterable[(Long, Double)]])
-case object GetLastError
-case class LastError(ex: Option[Throwable])
+case class GetMetadata(corrId: Any = null)
+case class GetAllSummaries(ranges: Iterable[(Long, Long)], corrId: Any = null)
+case class GetSummaries(rows: Iterable[String], ranges: Iterable[(Long, Long)], corrId: Any = null)
+case class GetInRange(rows: Iterable[String], from: Long, to: Long, corrId: Any = null)
+case class GetAllInRange(from: Long, to: Long, corrId: Any = null)
+case class Metadata(min: Long, max: Long, rows: Set[String], corrId: Any = null)
+case class Summaries(result: Map[String, Map[(Long, Long), Option[DetailedStats]]], corrId: Any = null)
+case class Ranges(result: Map[String, Iterable[(Long, Double)]], corrId: Any = null)
+case class GetLastError(corrId: Any = null)
+case class LastError(ex: Option[Throwable], corrId: Any = null)
