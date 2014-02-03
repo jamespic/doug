@@ -7,7 +7,7 @@ import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx
 trait OrientMixin extends OrientDocMixin {
   implicit var db: OObjectDatabaseTx = _
   var dbUri: String = _
-  abstract override def withFixture(test: NoArgTest) {
+  abstract override def withFixture(test: NoArgTest): org.scalatest.Outcome = {
     try {
       dbUri = s"memory:${System.currentTimeMillis()}"
       db = new OObjectDatabaseTx(dbUri)

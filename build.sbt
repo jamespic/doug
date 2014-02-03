@@ -16,7 +16,7 @@ libraryDependencies ++=  Seq(
   "com.orientechnologies" % "orientdb-object" % "1.5.1",
   "com.orientechnologies" % "orient-commons" % "1.5.1",
   "com.orientechnologies" % "orientdb-server" % "1.5.1",
-  "org.scalatest" % "scalatest_2.10" % "2.0.M5b" % "test",
+  "org.scalatest" % "scalatest_2.10" % "2.0" % "test",
   "com.typesafe.akka" %% "akka-actor" % "2.2.1",
   "com.typesafe.akka" %% "akka-testkit" % "2.2.1",
   "com.chuusai" %% "shapeless" % "1.2.4",

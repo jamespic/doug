@@ -1,10 +1,10 @@
 package uk.me.jamespic.dougng.model
 
-import org.scalatest.{FunSpec, ShouldMatchers}
+import org.scalatest.{FunSpecLike, Matchers}
 import uk.me.jamespic.dougng.OrientMixin
 import uk.me.jamespic.dougng.model.util.ScalaObjectMethodFilter
 
-class ScalaObjectMethodFiterTest extends FunSpec with ShouldMatchers with OrientMixin {
+class ScalaObjectMethodFiterTest extends FunSpecLike with Matchers with OrientMixin {
   describe("A ScalaObjectMethodFilter") {
     it("should recognise valid getter methods") {
       val m = cls.getMethod("testVar")

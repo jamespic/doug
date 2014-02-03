@@ -1,6 +1,6 @@
 package uk.me.jamespic.dougng.model
 
-import org.scalatest.{FunSpec, ShouldMatchers, GivenWhenThen}
+import org.scalatest.{FunSpecLike, Matchers, GivenWhenThen}
 import uk.me.jamespic.dougng.OrientMixin
 import uk.me.jamespic.dougng.model.util._
 import com.orientechnologies.orient.core.db.document.ODatabaseDocument
@@ -8,7 +8,7 @@ import com.orientechnologies.orient.core.record.impl.ODocument
 import java.util.{List => JList}
 import scala.collection.JavaConversions._
 
-class UtilTest extends FunSpec with ShouldMatchers with OrientMixin with GivenWhenThen {
+class UtilTest extends FunSpecLike with Matchers with OrientMixin with GivenWhenThen {
 
   def populate(docDb: ODatabaseDocument) {
     val schema = docDb.getMetadata().getSchema()
@@ -49,18 +49,18 @@ class UtilTest extends FunSpec with ShouldMatchers with OrientMixin with GivenWh
 
   describe("The lfloor function") {
     it("should round positive longs down") {
-      (121L floor 30L) should be === (120L)
-      (119L floor 30L) should be === (90L)
+      (121L floor 30L) should equal (120L)
+      (119L floor 30L) should equal (90L)
     }
 
     it("should leave divisible longs unchanged") {
-      (150L floor 30L) should be === (150L)
-      (-150L floor 30L) should be === (-150L)
+      (150L floor 30L) should equal (150L)
+      (-150L floor 30L) should equal (-150L)
     }
 
     it("should round negative longs down") {
-      (-121L floor 30L) should be === (-150L)
-      (-119L floor 30L) should be === (-120L)
+      (-121L floor 30L) should equal (-150L)
+      (-119L floor 30L) should equal (-120L)
     }
   }
 }

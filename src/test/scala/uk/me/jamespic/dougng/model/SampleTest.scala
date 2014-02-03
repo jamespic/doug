@@ -6,7 +6,7 @@ import java.util.Date
 import scala.collection.JavaConversions._
 import java.util.{List => JList, Set => JSet}
 
-class SampleTest extends FunSpec with ShouldMatchers with DBMixin with GivenWhenThen {
+class SampleTest extends FunSpecLike with Matchers with DBMixin with GivenWhenThen {
   describe("The Sample singleton") {
     it("should create samples, with subsamples and counters") {
       import Sample._
@@ -53,12 +53,6 @@ class SampleTest extends FunSpec with ShouldMatchers with DBMixin with GivenWhen
       result[Double]("pResponseTime") should equal(0.4)
       result[JSet[_]]("pCounters") should have size(1)
       result[JList[_]]("gpChildren") should have size(1)
-      
-      And("our indexes should contain everything we expect")
-      val urlIndexed = docDb.asyncSql("""select from index:idx_Sample_url""").toList
-      urlIndexed should have size(1)
-      val nameIndexed = docDb.asyncSql("""select from index:idx_Sample_name""").toList
-      nameIndexed should have size(2)
     }
   }
 }

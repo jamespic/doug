@@ -58,6 +58,8 @@ object Sample {
     }
 
     def counters = new Counters(doc)
+    def test: Test = doc("test")
+    def test_=(t: Test) = doc("test") = t
   }
 
   class Counters(val doc: Sample) extends AnyVal {

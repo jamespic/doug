@@ -3,7 +3,7 @@ package uk.me.jamespic.dougng.model
 import uk.me.jamespic.dougng.OrientMixin
 
 trait RegisteringMixin extends OrientMixin {
-  abstract override def withFixture(f: NoArgTest) = {
+  abstract override def withFixture(f: NoArgTest): org.scalatest.Outcome = {
     super.withFixture(new NoArgTest {
       val configMap = f.configMap
       val name = f.name

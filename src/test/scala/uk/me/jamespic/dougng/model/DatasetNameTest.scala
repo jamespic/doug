@@ -1,10 +1,10 @@
 package uk.me.jamespic.dougng.model
 
-import org.scalatest.FunSpec
+import org.scalatest.FunSpecLike
 import org.scalatest.GivenWhenThen
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
-class DatasetNameTest extends FunSpec with ShouldMatchers with GivenWhenThen{
+class DatasetNameTest extends FunSpecLike with Matchers with GivenWhenThen{
   describe("The DatasetName object") {
     it("should format dataset names in an akka compatible way") {
       DatasetName("#12:25") should equal("dataset-12-25")

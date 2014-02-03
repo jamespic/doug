@@ -1,10 +1,10 @@
 package uk.me.jamespic.dougng.util
 
-import org.scalatest.FunSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.FunSpecLike
+import org.scalatest.Matchers
 import org.scalatest.GivenWhenThen
 
-class DoubleRepTest extends FunSpec with ShouldMatchers with GivenWhenThen {
+class DoubleRepTest extends FunSpecLike with Matchers with GivenWhenThen {
   describe("A DoubleRep") {
     it("should convert back to itself") {
       DoubleRep(1.0).toDouble should equal(1.0)

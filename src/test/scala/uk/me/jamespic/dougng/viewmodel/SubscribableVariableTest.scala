@@ -1,8 +1,8 @@
 package uk.me.jamespic.dougng.viewmodel
 
-import org.scalatest.FunSpec
+import org.scalatest.FunSpecLike
 import org.scalatest.GivenWhenThen
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import akka.testkit.TestActorRef
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -17,7 +17,7 @@ import akka.actor.Kill
 
 
 class SubscribableVariableTest(_system: ActorSystem) extends TestKit(_system) with
-	FunSpec with ImplicitSender with ShouldMatchers
+	FunSpecLike with ImplicitSender with Matchers
 	with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
 
   def this() = this(ActorSystem("TestSystem"))

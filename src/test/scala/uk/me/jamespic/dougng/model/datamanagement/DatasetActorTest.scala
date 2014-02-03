@@ -1,9 +1,9 @@
 package uk.me.jamespic.dougng.model.datamanagement
 
-import org.scalatest.FunSpec
+import org.scalatest.FunSpecLike
 import uk.me.jamespic.dougng.OrientMixin
 import org.scalatest.GivenWhenThen
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import akka.testkit.TestActorRef
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -20,7 +20,7 @@ import uk.me.jamespic.dougng.util.MappedAllocator
 import uk.me.jamespic.dougng.model.RegisteringMixin
 
 class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
-	FunSpec with ImplicitSender with ShouldMatchers
+	FunSpecLike with ImplicitSender with Matchers
 	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
 
   def this() = this(ActorSystem("TestSystem"))
@@ -64,7 +64,7 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  val summary = expectMsgType[Summaries](5 seconds)
 	  summary.corrId should equal("req2")
 	  val rowMap = summary.result("MyRow").toMap
-	  rowMap((1L, 10L)).get.getSum should be (55.0 plusOrMinus 0.1)
+	  rowMap((1L, 10L)).get.getSum should be (55.0 +- 0.1)
 
 	  // Some more data, just for fun
 	  instance ! GetAllInRange(25L, 50L, "req3")

@@ -1,10 +1,10 @@
 package uk.me.jamespic.dougng.util
 
-import org.scalatest.FunSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.FunSpecLike
+import org.scalatest.Matchers
 import org.scalatest.GivenWhenThen
 
-class AverageTest extends FunSpec with ShouldMatchers with GivenWhenThen {
+class AverageTest extends FunSpecLike with Matchers with GivenWhenThen {
   describe("An Average") {
     it("should have an average of 0 when empty") {
       Given("an empty Average")
@@ -19,7 +19,7 @@ class AverageTest extends FunSpec with ShouldMatchers with GivenWhenThen {
       When("we add the numbers 9, 9, and 12")
       val newAvg = a + 9 + 9 + 12
       Then("the average should be 10")
-      newAvg.avg should be (10.0 plusOrMinus 0.001)
+      newAvg.avg should be (10.0 +- 0.001)
     }
   }
 }

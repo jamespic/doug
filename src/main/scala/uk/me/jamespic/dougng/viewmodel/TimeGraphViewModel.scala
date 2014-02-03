@@ -8,8 +8,15 @@ import scala.collection.JavaConversions._
 import uk.me.jamespic.dougng.model.DatasetName
 import scala.collection.SortedMap
 import uk.me.jamespic.dougng.util.DetailedStats
+import akka.actor.Props
+import uk.me.jamespic.dougng.model.TimeGraphViewModelName
 
-//FIXME FIXME FIXME: Test this
+object TimeGraphViewModel {
+  def constructMsg(recordId: String) = {
+
+    CreateDataDependentActor(pool => Props(new TimeGraphViewModel(recordId, pool)), TimeGraphViewModelName(recordId))
+  }
+}
 
 class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends SubscribableVariable {
   type Row = SortedMap[(Long, Long), Double]

@@ -6,7 +6,7 @@ import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx
 
 trait OrientDocMixin extends Suite { this: OrientMixin =>
   implicit var docDb: ODatabaseDocumentTx = _
-  abstract override def withFixture(test: NoArgTest) {
+  abstract override def withFixture(test: NoArgTest): org.scalatest.Outcome = {
     try {
       docDb = new ODatabaseDocumentTx(dbUri)
       docDb = docDb.open("admin", "admin")

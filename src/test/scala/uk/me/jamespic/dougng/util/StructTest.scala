@@ -1,11 +1,11 @@
 package uk.me.jamespic.dougng.util
 
-import org.scalatest.FunSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.FunSpecLike
+import org.scalatest.Matchers
 import org.scalatest.GivenWhenThen
 
 
-class StructTest extends FunSpec with ShouldMatchers with GivenWhenThen {
+class StructTest extends FunSpecLike with Matchers with GivenWhenThen {
   describe("A Struct") {
     class SubStruct(storage: Allocator#Storage, offset: Int) extends Struct[SubStruct](storage, offset) {
       val x = __var__[Double]

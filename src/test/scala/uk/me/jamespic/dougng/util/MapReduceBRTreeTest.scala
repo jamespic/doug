@@ -1,10 +1,10 @@
 package uk.me.jamespic.dougng.util
 
-import org.scalatest.FunSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.FunSpecLike
+import org.scalatest.Matchers
 import org.scalatest.GivenWhenThen
 
-class MapReduceBRTreeTest extends FunSpec with ShouldMatchers with GivenWhenThen {
+class MapReduceBRTreeTest extends FunSpecLike with Matchers with GivenWhenThen {
   describe("A MapReduceBRTree") {
     import MapReduce.sum
     it("should be constructible") {

@@ -1,10 +1,10 @@
 package uk.me.jamespic.dougng.util
 
-import org.scalatest.FunSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.FunSpecLike
+import org.scalatest.Matchers
 import org.scalatest.GivenWhenThen
 
-class HistogramTest extends FunSpec with ShouldMatchers with GivenWhenThen {
+class HistogramTest extends FunSpecLike with Matchers with GivenWhenThen {
   describe("A Histogram") {
     it("should be constructible and combinable") {
       val histograms = for (i <- 0 to 1000) yield {
