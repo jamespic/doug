@@ -42,7 +42,7 @@ class Database(url: String) extends Actor with ActorLogging {
       messageAllChildren(upd)
     case AllDone =>
       dec(sender)
-      if (masterActivity == Some(sender)) doRemindLaters
+//      if (masterActivity == Some(sender)) doRemindLaters
     case RemindMeLater =>
       dec(sender)
       remindMeLaters += sender
@@ -56,7 +56,10 @@ class Database(url: String) extends Actor with ActorLogging {
   }
 
   private def messageAllChildren(msg: Any) = sendUpdate(dataDependentChildren &~ remindMeLaters, msg)
-  private def doRemindLaters = sendUpdate(remindMeLaters, PleaseUpdate)
+  private def doRemindLaters = {
+    remindMeLaters foreach permitUpdate
+    remindMeLaters = Set.empty
+  }
 
   private def sendUpdate(recipients: Traversable[ActorRef], msg: Any) = {
     for {child <- recipients
@@ -86,15 +89,24 @@ class Database(url: String) extends Actor with ActorLogging {
   private def maybeNextInQueue(q: Queue[ActorRef], andBecome: Receive) = {
     val nextOp = q.poll
     if (nextOp != null) {
-      nextOp ! PleaseUpdate
       masterActivity = Some(nextOp)
-      responseCounts(nextOp) += 1
+      nextOp ! PleaseUpdate
+      inc(nextOp)
       context become andBecome
       true
     } else false
   }
 
+  private def permitUpdate(actor: ActorRef) = {
+    actor ! PleaseUpdate
+    inc(actor)
+  }
+
   private def maybeEndActivity = {
+    if (responseCounts.forall(_._2 == 0)) {
+      doRemindLaters
+    }
+    // Check that responseCounts is still empty
     if (responseCounts.forall(_._2 == 0)) {
       cleanUpAfterActivity
       maybeStartActivity

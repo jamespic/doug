@@ -1,6 +1,6 @@
 package uk.me.jamespic.dougng.model.datamanagement
 
-import akka.actor.{Actor, ActorRef, Terminated}
+import akka.actor.{Actor, ActorRef, Stash, Terminated}
 import com.orientechnologies.orient.core.command.{OBasicCommandContext,OCommandContext}
 import com.orientechnologies.orient.core.sql.filter.{OSQLTarget, OSQLFilter}
 import scala.collection.JavaConversions._
@@ -34,7 +34,8 @@ object DatasetActor {
   }
 }
 
-class DatasetActor(private var datasetId: String, dataFactory: => DataStore, pool: ReplacablePool) extends Actor {
+class DatasetActor(private var datasetId: String, dataFactory: => DataStore, pool: ReplacablePool)
+    extends Actor with Stash {
   import DatasetActor._
   private var dataOpt: Option[DataStore] = None
   private var listeners = Set.empty[ActorRef]
@@ -69,16 +70,16 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
     super.postStop
   }
 
-  def receive = {
+  def receive = uninitialised
+
+  def uninitialised: Receive = base orElse {
+    case _ => stash()
+  }
+
+  def initialised: Receive = base orElse {
     /*
      * Update notification/permission messages
      */
-    case PleaseUpdate => initialise
-    case DocumentsInserted(docs) => handleInsert(docs)
-    case DatasetUpdate(ids) if ids contains dataset.id => initialise
-    // Default, for an update message we don't care about
-    case _: PleaseUpdate => sender ! AllDone
-
     case ListenTo => listenTo
     case UnlistenTo => listeners -= sender
     case GetMetadata(corrId) => sender ! Metadata(data.min, data.max, data.rows, corrId)
@@ -89,6 +90,14 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
     case NotificationTime => notifyListeners
     case GetLastError(corrId) => LastError(lastError, corrId)
     case Terminated(listener) => listeners -= listener
+  }
+
+  def base: Receive = {
+    case PleaseUpdate => initialise
+    case DocumentsInserted(docs) => handleInsert(docs)
+    case DatasetUpdate(ids) if ids contains dataset.id => initialise
+    // Default, for an update message we don't care about
+    case _: PleaseUpdate => sender ! AllDone
   }
 
   private def notifyListeners {
@@ -108,7 +117,7 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
   private def listenTo {
     listeners += sender
     context.watch(sender)
-    sender ! DataUpdatedNotification
+    if (dataOpt.isDefined) sender ! DataUpdatedNotification
   }
 
   private def summaries(rows: Iterable[String], ranges: Iterable[(Long,Long)], corrId: Any) {
@@ -128,15 +137,18 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
   }
 
   private def data = {
-    dataOpt getOrElse {
-      val data = dataFactory
-      dataOpt = Some(data)
-      data
-    }
+    dataOpt getOrElse renew
+  }
+
+  private def renew = {
+    val data = dataFactory
+    dataOpt = Some(data)
+    data
   }
 
   private def regenerate {
     invalidate
+    renew
     for (db <- pool) catchingOException(()) {
         updateRecord(db)
         updateClassInsertHandler
@@ -166,6 +178,8 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
 
   private def initialise {
     regenerate
+    context.become(initialised)
+    unstashAll()
     sender ! AllDone
   }
 

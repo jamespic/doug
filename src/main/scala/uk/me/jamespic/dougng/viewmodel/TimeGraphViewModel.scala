@@ -53,8 +53,9 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
     clearOldData
     for (db <- pool) {
       var dbo = db.load[TimeGraph](new ORecordId(recordId))
-      record = Some(dbo)
-      receivedDatasets = (for (ds <- dbo.datasets ++ dbo.maxDatasets) yield {
+      var detached = db.detach[TimeGraph](dbo)
+      record = Some(detached)
+      receivedDatasets = (for (ds <- detached.datasets ++ detached.maxDatasets) yield {
         context.parent ! GetDataset(ds.id)
         ds.id -> new DatasetInfo()
       }).toMap

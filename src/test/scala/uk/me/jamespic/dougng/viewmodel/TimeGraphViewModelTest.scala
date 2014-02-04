@@ -16,11 +16,17 @@ import java.util.Date
 import uk.me.jamespic.dougng.model.TimeGraph
 import uk.me.jamespic.dougng.model.Dataset
 import scala.collection.JavaConversions._
+import scala.concurrent.duration._
 
+//FIXME FIXME FIXME: This test fails
 
 class TimeGraphViewModelTest(_system: ActorSystem) extends TestKit(_system) with
 	FunSpecLike with ImplicitSender with Matchers
 	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
+
+  def this() = this(ActorSystem("TestSystem"))
+  val timeout = 5 days
+
   describe("A TimeGraphViewModel") {
     it("should provide a subscribable view of Time Graph data") {
       val rid = doSetUp
@@ -30,16 +36,17 @@ class TimeGraphViewModelTest(_system: ActorSystem) extends TestKit(_system) with
       val ActorCreated(instance, name) = expectMsgClass(classOf[ActorCreated])
 
       instance ! Subscribe(None)
-      val DataChanged(updateNo, data: TimeGraphViewModel#Table) = expectMsgClass(classOf[DataChanged])
+      val DataChanged(updateNo, data: TimeGraphViewModel#Table) =
+        expectMsgClass(timeout , classOf[DataChanged])
       updateNo should equal(0L)
       data should have size(1)
       val testPageRow = data("TestPage")
       testPageRow should have size(60)
       val (firstTs, firstData) = testPageRow.head
-      firstTs should equal((start, start + 1 * minute))
+      firstTs should equal((start, start + 1 * minute - 1))
       firstData should be (500.0 +- 1.0)
       val (lastTs, lastData) = testPageRow.last
-      lastTs should equal((start + 59 * minute, start + 60 * minute))
+      lastTs should equal((start + 59 * minute, start + 60 * minute - 1))
     }
   }
 
@@ -66,14 +73,14 @@ class TimeGraphViewModelTest(_system: ActorSystem) extends TestKit(_system) with
     dataset.rowName = "name"
     dataset.table = "Sample"
     dataset.timestamp = "timestamp"
-    dataset.whereClause = "responded = true"
+    dataset.whereClause = "success"
     dataset = db.save(dataset)
 
 
     // Create TimeGraph
     var timegraph = new TimeGraph
     timegraph.granularity = minute
-    timegraph.datasets = List(dataset)
+    timegraph.datasets += dataset
     timegraph.name = "My Graph"
     timegraph = db.save(timegraph)
     timegraph.id

@@ -19,6 +19,8 @@ import uk.me.jamespic.dougng.model.Dataset
 import uk.me.jamespic.dougng.util.MappedAllocator
 import uk.me.jamespic.dougng.model.RegisteringMixin
 
+
+//FIXME FIXME FIXME: This test fails
 class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
 	FunSpecLike with ImplicitSender with Matchers
 	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
@@ -67,7 +69,7 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
 
 	  instance ! DocumentsInserted(samples)
 	  instance ! AllDone
-	  expectMsg(DataUpdatedNotification)
+	  expectMsg(timeout, DataUpdatedNotification)
 
 	  dsActor ! GetAllSummaries(Seq((1L, 10L)))
 	  val summary = expectMsgType[Summaries](timeout)
