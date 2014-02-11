@@ -9,6 +9,11 @@ import java.util.concurrent.locks.Lock
 object ReplacablePool {
   private val DefaultUserName = "admin"
   private val DefaultPassword = "admin"
+  def apply(url: String) = {
+    val pool = new ReplacablePool
+    pool.url = url
+    pool
+  }
 }
 
 class ReplacablePool {

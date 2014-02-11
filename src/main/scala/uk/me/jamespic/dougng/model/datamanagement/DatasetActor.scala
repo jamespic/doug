@@ -97,6 +97,7 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
     case DocumentsInserted(docs) => handleInsert(docs)
     case DatasetUpdate(ids) if ids contains dataset.id => initialise
     // Default, for an update message we don't care about
+    case DocumentsDeleted(docs) if docs contains dataset.id => context.stop(self)
     case _: PleaseUpdate => sender ! AllDone
   }
 

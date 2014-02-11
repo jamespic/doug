@@ -18,10 +18,8 @@ import uk.me.jamespic.dougng.model.Dataset
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 
-//FIXME FIXME FIXME: This test fails
-
 class TimeGraphViewModelTest(_system: ActorSystem) extends TestKit(_system) with
-	FunSpecLike with ImplicitSender with Matchers
+	FunSpecLike with ImplicitSender with Matchers with SimpleDataSet
 	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
 
   def this() = this(ActorSystem("TestSystem"))
@@ -49,7 +47,9 @@ class TimeGraphViewModelTest(_system: ActorSystem) extends TestKit(_system) with
       lastTs should equal((start + 59 * minute, start + 60 * minute - 1))
     }
   }
+}
 
+trait SimpleDataSet {this: RegisteringMixin =>
   val second = 1000
   val minute = 60 * 1000
   val start = 12L * 60L * 60L * 1000L + 3 * second

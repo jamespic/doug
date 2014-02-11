@@ -13,7 +13,7 @@ import org.scalatest.BeforeAndAfter
 import akka.actor.Props
 import akka.actor.Terminated
 import akka.actor.Actor
-import akka.actor.Kill
+import akka.actor.PoisonPill
 
 
 class SubscribableVariableTest(_system: ActorSystem) extends TestKit(_system) with
@@ -50,7 +50,7 @@ class SubscribableVariableTest(_system: ActorSystem) extends TestKit(_system) wi
       val instance = system.actorOf(Props[TestSubscribableVariable])
 
       instance.tell(Subscribe(None), fakeActor)
-      fakeActor ! Kill
+      fakeActor ! PoisonPill
       expectMsgClass(classOf[Terminated])
 
       instance ! Emit("message")

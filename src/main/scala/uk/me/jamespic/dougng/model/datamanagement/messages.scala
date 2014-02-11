@@ -27,6 +27,7 @@ case object RequestExclusiveDatabaseAccess
  */
 sealed trait PleaseUpdate
 case class DocumentsInserted(doc: Traversable[ODocument]) extends PleaseUpdate
+case class DocumentsDeleted(doc: Set[String]) extends PleaseUpdate
 case class DatasetUpdate(idsAffected: Set[String]) extends PleaseUpdate
 case class PresentationUpdate(idsAffected: Set[String]) extends PleaseUpdate
 case object PleaseUpdate extends PleaseUpdate

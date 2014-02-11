@@ -18,6 +18,7 @@ import uk.me.jamespic.dougng.model.Sample._
 import uk.me.jamespic.dougng.model.Dataset
 import uk.me.jamespic.dougng.util.MappedAllocator
 import uk.me.jamespic.dougng.model.RegisteringMixin
+import akka.actor.Terminated
 
 class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	FunSpecLike with ImplicitSender with Matchers
@@ -39,6 +40,8 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  dataset.whereClause = "name = 'MyRow'"
 	  dataset = db.save(dataset)
 
+	  val datasetId = dataset.id
+
 	  // Put some simple data in the database
 	  for (i <- 1L to 100L) {
 	    val sample = Sample("MyRow", new Date(i))
@@ -49,7 +52,7 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  val pool = new ReplacablePool
 	  pool.url = dbUri
 
-	  val instance = system.actorOf(Props(new DatasetActor(dataset.id, DataStore.memory, pool)))
+	  val instance = system.actorOf(Props(new DatasetActor(datasetId, DataStore.memory, pool)))
 
 	  // Initialise
 	  instance ! PleaseUpdate
@@ -93,6 +96,18 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 
 	  instance ! GetAllInRange(101L, 101L, "req5")
 	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0)), "req5"))
+
+	  // Test delete handling
+	  watch(instance)
+
+	  // Delete unrelated document
+	  instance ! DocumentsDeleted(Set(datasetId + 1L))
+	  expectMsg(AllDone)
+
+	  // Delete dataset
+	  db.delete(dataset)
+	  instance ! DocumentsDeleted(Set(datasetId))
+	  expectMsgClass(classOf[Terminated])
 	}
   }
 }

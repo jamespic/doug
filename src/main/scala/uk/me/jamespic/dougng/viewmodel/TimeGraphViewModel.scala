@@ -13,8 +13,10 @@ import uk.me.jamespic.dougng.model.TimeGraphViewModelName
 
 object TimeGraphViewModel {
   def constructMsg(recordId: String) = {
-
     CreateDataDependentActor(pool => Props(new TimeGraphViewModel(recordId, pool)), TimeGraphViewModelName(recordId))
+  }
+  val viewModelFactory: GraphListViewModel.ViewModelFactory = {
+    case x: TimeGraph => constructMsg(x.id)
   }
 }
 
@@ -38,6 +40,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
   private def handleDataUpdate(msg: PleaseUpdate) = msg match {
     case PleaseUpdate => initialise
     case DatasetUpdate(ids) if ((ids & (receivedDatasets.keySet + recordId)).nonEmpty) => initialise
+    case DocumentsDeleted(docs) if docs contains recordId => shutdown
     case _ => context.parent ! AllDone
   }
 
@@ -49,18 +52,26 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
     }
   }
 
+  private def shutdown = {
+    context.stop(self)
+  }
+
   private def initialise = {
     clearOldData
     for (db <- pool) {
       var dbo = db.load[TimeGraph](new ORecordId(recordId))
-      var detached = db.detach[TimeGraph](dbo)
-      record = Some(detached)
-      receivedDatasets = (for (ds <- detached.datasets ++ detached.maxDatasets) yield {
-        context.parent ! GetDataset(ds.id)
-        ds.id -> new DatasetInfo()
-      }).toMap
+      if (dbo == null) {
+    	shutdown
+      } else {
+        var detached = db.detach[TimeGraph](dbo)
+        record = Some(detached)
+        receivedDatasets = (for (ds <- detached.datasets ++ detached.maxDatasets) yield {
+          context.parent ! GetDataset(ds.id)
+          ds.id -> new DatasetInfo()
+        }).toMap
+        context.parent ! AllDone
+      }
     }
-    context.parent ! AllDone
   }
 
   def clearOldData = {

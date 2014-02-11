@@ -7,7 +7,6 @@ import scala.collection.mutable.{Map => MMap}
 import scala.concurrent.Future
 import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 import scala.concurrent.Promise
-import akka.actor.Kill
 import uk.me.jamespic.dougng.model.DatasetName
 
 object Database {
@@ -33,8 +32,19 @@ class Database(url: String) extends Actor with ActorLogging {
     case GetDataset(recordId) => getDataset(recordId)
     case RequestPermissionToUpdate => smallOpQueue push sender
     case RequestExclusiveDatabaseAccess => bigOpQueue push sender
-    case Terminated(msg) =>
-      dataDependentChildren -= sender
+    case Terminated(msg) => childTerminated
+  }
+
+  private def childTerminated = {
+    forget(sender)
+    maybeEndActivity
+  }
+
+  private def forget(actor: ActorRef) = {
+    // If an actor is terminated, free it from any obligations
+    dataDependentChildren -= actor
+    remindMeLaters -= actor
+    responseCounts -= actor
   }
 
   private def handleUpdates: Receive = {
@@ -51,7 +61,7 @@ class Database(url: String) extends Actor with ActorLogging {
   private def inc(actor: ActorRef) = responseCounts(actor) += 1
   private def dec(actor: ActorRef) = {
     val prev = responseCounts(actor)
-    responseCounts(actor) = prev - 1
+    responseCounts(actor) = prev - 1 max 0
     if (prev < 1) log.warning(s"Received a response from $actor, that doesn't correspond to a request")
   }
 
@@ -116,14 +126,13 @@ class Database(url: String) extends Actor with ActorLogging {
   private def cleanUpAfterActivity = {
     responseCounts.clear
     remindMeLaters = Set.empty
-    context.unbecome()
+    context become idle
     masterActivity = None
   }
 
   private def createDDActor(req: CreateDataDependentActor) = {
     val CreateDataDependentActor(cons, name) = req
-    val actor = context.actorOf(cons(pool), name)
-    dataDependentChildren += actor
+    val actor = superviseNewActor(cons(pool), name)
     sender ! ActorCreated(actor, name)
     actor
   }
@@ -131,12 +140,18 @@ class Database(url: String) extends Actor with ActorLogging {
   private def getDataset(recordId: String) = {
     val name = DatasetName(recordId)
     val ds = datasets.getOrElse(recordId, {
-      val actor = context.actorOf(
+      val actor = superviseNewActor(
           Props(new DatasetActor(recordId, dataFactory, pool)), name)
       datasets += recordId -> actor
-      dataDependentChildren += actor
       actor
     })
     sender ! ActorCreated(ds, name)
+  }
+
+  private def superviseNewActor(props: Props, name: String) = {
+      val actor = context.actorOf(props, name)
+    context.watch(actor)
+    dataDependentChildren += actor
+    actor
   }
 }

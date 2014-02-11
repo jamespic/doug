@@ -18,14 +18,18 @@ import uk.me.jamespic.dougng.model.Sample._
 import uk.me.jamespic.dougng.model.Dataset
 import uk.me.jamespic.dougng.util.MappedAllocator
 import uk.me.jamespic.dougng.model.RegisteringMixin
+import akka.actor.Actor
+import java.util.concurrent.atomic.AtomicInteger
+import org.scalatest.concurrent.Eventually
+import akka.actor.PoisonPill
 
 
-//FIXME FIXME FIXME: This test fails
 class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
 	FunSpecLike with ImplicitSender with Matchers
-	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
+	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter
+	with Eventually {
 
-  val timeout = 5 seconds
+  val timeout = 5 days
   def this() = this(ActorSystem("TestSystem"))
 
   override def afterAll {
@@ -73,10 +77,60 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
 
 	  dsActor ! GetAllSummaries(Seq((1L, 10L)))
 	  val summary = expectMsgType[Summaries](timeout)
+	  // FIXME FIXME FIXME - probable race condition means MyRow sometimes doesn't exist
 	  val rowMap = summary.result("MyRow").toMap
 	  rowMap((1L, 10L)).get.getSum should be (55.0 +- 0.1)
 
 	  expectNoMsg(5 seconds)
 	}
+
+	it("should supervise data dependent actors") {
+	  val instance = system.actorOf(Props(new Database(dbUri)))
+
+	  val responseCount = new AtomicInteger(0)
+
+	  def constructor(pool: ReplacablePool) = Props(new Actor {
+	    override def preStart = {
+	      super.preStart
+	      context.parent ! RequestPermissionToUpdate
+	    }
+	    def receive = {
+	      case _: PleaseUpdate =>
+	        responseCount.incrementAndGet()
+	        context.parent ! AllDone
+	    }
+	  })
+
+	  instance ! CreateDataDependentActor(constructor, "MyActor")
+	  val testActor = expectMsgClass(classOf[ActorCreated])
+	  eventually {responseCount.intValue should equal(1)}
+
+	  instance ! RequestPermissionToUpdate
+	  expectMsg(PleaseUpdate)
+	  instance ! DocumentsInserted(Set())
+	  instance ! AllDone
+	  eventually {responseCount.intValue should equal(2)}
+
+	  // Test that actor termination is as good as AllDone
+	  instance ! CreateDataDependentActor((pool => Props[NoopActor]), "BadActor")
+	  val ActorCreated(badActor, name) = expectMsgClass(classOf[ActorCreated])
+
+	  instance ! RequestPermissionToUpdate
+	  expectMsg(PleaseUpdate)
+	  // Send PleaseUpdate - this should be forwarded to everything, including badActor, which won't respond
+	  instance ! PleaseUpdate
+	  badActor ! PoisonPill
+	  instance ! AllDone
+	  eventually {responseCount.intValue should equal(3)}
+
+	  // Check that the update session has finished, by requesting another
+	  instance ! RequestPermissionToUpdate
+	  expectMsg(PleaseUpdate)
+	  instance ! AllDone
+	}
   }
+}
+
+class NoopActor extends Actor {
+  def receive = {case _ => /* Do Nothing */}
 }
