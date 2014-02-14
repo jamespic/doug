@@ -6,5 +6,5 @@ import java.awt.Color
 abstract class RowGraph extends Graph {
   var datasets: JList[Dataset] = new ArrayList()
   var hiddenRows: JList[String] = new ArrayList()
-  var rowColours: JMap[String, Color] = new HashMap()
+  var rowColours: JMap[String, String] = new HashMap()
 }

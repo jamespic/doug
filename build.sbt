@@ -4,7 +4,7 @@ EclipseKeys.withSource := true
 
 version := "0.1"
 
-scalaVersion := "2.10.1"
+scalaVersion := "2.10.3"
 
 resolvers ++= Seq(
   "Sonatype OSS Releases" at "http://oss.sonatype.org/content/repositories/releases/",
@@ -12,17 +12,18 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++=  Seq(
-  "com.orientechnologies" % "orientdb-core" % "1.5.1",
-  "com.orientechnologies" % "orientdb-object" % "1.5.1",
-  "com.orientechnologies" % "orient-commons" % "1.5.1",
-  "com.orientechnologies" % "orientdb-server" % "1.5.1",
+  "com.orientechnologies" % "orientdb-core" % "1.6.4",
+  "com.orientechnologies" % "orientdb-object" % "1.6.4",
+  "com.orientechnologies" % "orient-commons" % "1.6.4",
+  "com.orientechnologies" % "orientdb-server" % "1.6.4",
   "org.scalatest" % "scalatest_2.10" % "2.0" % "test",
   "com.typesafe.akka" %% "akka-actor" % "2.2.1",
   "com.typesafe.akka" %% "akka-testkit" % "2.2.1",
   "com.chuusai" %% "shapeless" % "1.2.4",
   "org.scalaz" %% "scalaz-core" % "7.0.1",
   "org.apache.commons" % "commons-math3" % "3.2",
-  "com.jsuereth" %% "scala-arm" % "1.3"
+  "com.jsuereth" %% "scala-arm" % "1.3",
+  "com.dongxiguo" %% "fastring" % "0.2.2"
 )
 
 libraryDependencies <++= (scalaVersion)(sv =>
