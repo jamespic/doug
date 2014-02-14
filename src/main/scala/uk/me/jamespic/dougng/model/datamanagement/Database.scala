@@ -132,7 +132,7 @@ class Database(url: String) extends Actor with ActorLogging {
 
   private def createDDActor(req: CreateDataDependentActor) = {
     val CreateDataDependentActor(cons, name) = req
-    val actor = superviseNewActor(cons(pool), name)
+    val actor = superviseNewActor(cons(ConstructorInfo(pool, self)), name)
     sender ! ActorCreated(actor, name)
     actor
   }
@@ -141,7 +141,7 @@ class Database(url: String) extends Actor with ActorLogging {
     val name = DatasetName(recordId)
     val ds = datasets.getOrElse(recordId, {
       val actor = superviseNewActor(
-          Props(new DatasetActor(recordId, dataFactory, pool)), name)
+          Props(new DatasetActor(recordId, dataFactory, pool, self)), name)
       datasets += recordId -> actor
       actor
     })

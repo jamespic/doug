@@ -11,21 +11,22 @@ object GraphListViewModel {
   type ViewModelFactory = PartialFunction[Graph, CreateDataDependentActor]
   case class GraphInfo(record: Graph, actorRef: ActorRef)
   def constructMsg(vmFactory: ViewModelFactory) = {
-    CreateDataDependentActor(pool => Props(new GraphListViewModel(vmFactory, pool)), "graph-list")
+    CreateDataDependentActor(consInfo => Props(new GraphListViewModel(vmFactory, consInfo.pool, consInfo.database)), "graph-list")
   }
 }
 
 //FIXME: Test This
 class GraphListViewModel(
     viewModelFactory: GraphListViewModel.ViewModelFactory,
-    pool: ReplacablePool) extends SubscribableVariable {
+    pool: ReplacablePool,
+    database: ActorRef) extends SubscribableVariable {
   import GraphListViewModel._
 
   private var graphActors = Map.empty[String, GraphInfo]
   private var pendingGraphs = Map.empty[String, Graph]
 
   override def preStart = {
-    context.parent ! RequestPermissionToUpdate
+    database ! RequestPermissionToUpdate
   }
 
   override def receive = super.receive orElse {
@@ -90,7 +91,7 @@ class GraphListViewModel(
                            || (pendingGraphs contains x.id)))
       pendingGraphs ++= (for (graph <- newGraphs; if viewModelFactory isDefinedAt graph) yield {
         val request = viewModelFactory(graph)
-        context.parent ! request
+        database ! request
         request.name -> db.detachAll[Graph](graph, true)
       })
     }

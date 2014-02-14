@@ -10,7 +10,8 @@ import akka.actor.{Props, ActorRef}
  * and once they receive permission (via a PermissionToUpdate), they have permission until
  * they relinquish it with an UpdateComplete.
  */
-case class CreateDataDependentActor(constructor: ReplacablePool => Props, name: String)
+case class ConstructorInfo(pool: ReplacablePool, database: ActorRef)
+case class CreateDataDependentActor(constructor: ConstructorInfo => Props, name: String)
 case class ActorCreated(actor: ActorRef, name: String)
 case class GetDataset(recordId: String)
 

@@ -52,7 +52,8 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  val pool = new ReplacablePool
 	  pool.url = dbUri
 
-	  val instance = system.actorOf(Props(new DatasetActor(datasetId, DataStore.memory, pool)))
+	  val instance = system.actorOf(Props(new DatasetActor(datasetId, DataStore.memory, pool, self)))
+	  expectMsg(RequestPermissionToUpdate)
 
 	  // Initialise
 	  instance ! PleaseUpdate

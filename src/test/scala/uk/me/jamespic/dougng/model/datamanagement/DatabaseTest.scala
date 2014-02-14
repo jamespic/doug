@@ -89,15 +89,15 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
 
 	  val responseCount = new AtomicInteger(0)
 
-	  def constructor(pool: ReplacablePool) = Props(new Actor {
+	  def constructor(info: ConstructorInfo) = Props(new Actor {
 	    override def preStart = {
 	      super.preStart
-	      context.parent ! RequestPermissionToUpdate
+	      info.database ! RequestPermissionToUpdate
 	    }
 	    def receive = {
 	      case _: PleaseUpdate =>
 	        responseCount.incrementAndGet()
-	        context.parent ! AllDone
+	        info.database ! AllDone
 	    }
 	  })
 

@@ -29,12 +29,12 @@ object DatasetActor {
 
   private case object NotificationTime
 
-  def constructor(datasetId: String, dataFactory: => DataStore)(pool: ReplacablePool) = {
-    new DatasetActor(datasetId, dataFactory, pool)
+  def constructor(datasetId: String, dataFactory: => DataStore)(consInfo: ConstructorInfo) = {
+    new DatasetActor(datasetId, dataFactory, consInfo.pool, consInfo.database)
   }
 }
 
-class DatasetActor(private var datasetId: String, dataFactory: => DataStore, pool: ReplacablePool)
+class DatasetActor(private var datasetId: String, dataFactory: => DataStore, pool: ReplacablePool, database: ActorRef)
     extends Actor with Stash {
   import DatasetActor._
   private var dataOpt: Option[DataStore] = None
@@ -62,7 +62,7 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
 
   override def preStart = {
     super.preStart
-    context.parent ! RequestPermissionToUpdate
+    database ! RequestPermissionToUpdate
   }
 
   override def postStop = {

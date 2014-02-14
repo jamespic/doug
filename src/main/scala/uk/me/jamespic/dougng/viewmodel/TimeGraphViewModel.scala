@@ -13,14 +13,14 @@ import uk.me.jamespic.dougng.model.TimeGraphViewModelName
 
 object TimeGraphViewModel {
   def constructMsg(recordId: String) = {
-    CreateDataDependentActor(pool => Props(new TimeGraphViewModel(recordId, pool)), TimeGraphViewModelName(recordId))
+    CreateDataDependentActor(consInfo => Props(new TimeGraphViewModel(recordId, consInfo.pool, consInfo.database)), TimeGraphViewModelName(recordId))
   }
   val viewModelFactory: GraphListViewModel.ViewModelFactory = {
     case x: TimeGraph => constructMsg(x.id)
   }
 }
 
-class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends SubscribableVariable {
+class TimeGraphViewModel(recordId: String, pool: ReplacablePool, database: ActorRef) extends SubscribableVariable {
   type Row = SortedMap[(Long, Long), Double]
   type Table = SortedMap[String, Row]
   import context.dispatcher
@@ -41,7 +41,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
     case PleaseUpdate => initialise
     case DatasetUpdate(ids) if ((ids & (receivedDatasets.keySet + recordId)).nonEmpty) => initialise
     case DocumentsDeleted(docs) if docs contains recordId => shutdown
-    case _ => context.parent ! AllDone
+    case _ => database ! AllDone
   }
 
   private def handleReceivedDataset(rid: String, actor: ActorRef) = {
@@ -66,10 +66,10 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
         var detached = db.detachAll[TimeGraph](dbo, true)
         record = Some(detached)
         receivedDatasets = (for (ds <- detached.datasets ++ detached.maxDatasets) yield {
-          context.parent ! GetDataset(ds.id)
+          database ! GetDataset(ds.id)
           ds.id -> new DatasetInfo()
         }).toMap
-        context.parent ! AllDone
+        database ! AllDone
       }
     }
   }
@@ -130,7 +130,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
 
   override def preStart = {
     super.preStart
-    context.parent ! RequestPermissionToUpdate
+    database ! RequestPermissionToUpdate
   }
 
   private class DatasetInfo(var actor: Option[ActorRef] = None,
