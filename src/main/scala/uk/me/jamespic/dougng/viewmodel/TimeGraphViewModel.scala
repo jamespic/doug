@@ -63,7 +63,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool) extends Subscri
       if (dbo == null) {
     	shutdown
       } else {
-        var detached = db.detach[TimeGraph](dbo)
+        var detached = db.detachAll[TimeGraph](dbo, true)
         record = Some(detached)
         receivedDatasets = (for (ds <- detached.datasets ++ detached.maxDatasets) yield {
           context.parent ! GetDataset(ds.id)

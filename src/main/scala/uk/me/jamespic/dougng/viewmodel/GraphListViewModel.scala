@@ -38,7 +38,7 @@ class GraphListViewModel(
 
   private def reload(db: OObjectDatabaseTx, graph: Graph) = {
     val reloaded = db.reload[Graph](graph)
-    db.detach[Graph](reloaded)
+    db.detachAll[Graph](reloaded, true)
   }
 
   private def deleteRecords(docs: Set[String]) = {
@@ -91,7 +91,7 @@ class GraphListViewModel(
       pendingGraphs ++= (for (graph <- newGraphs; if viewModelFactory isDefinedAt graph) yield {
         val request = viewModelFactory(graph)
         context.parent ! request
-        request.name -> db.detach[Graph](graph)
+        request.name -> db.detachAll[Graph](graph, true)
       })
     }
     sender ! AllDone

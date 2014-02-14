@@ -61,6 +61,16 @@ package object util {
     }
   }
 
+  def initDB(implicit db: OObjectDatabaseTx) {
+    db.setAutomaticSchemaGeneration(true)
+    registerClasses
+    ensureSchema
+  }
+
+  def uninitDB(implicit db: OObjectDatabaseTx) {
+    deregisterClasses
+  }
+
   def registerClasses(implicit db: OObjectDatabaseTx) {
     for (cls <- modelClasses) {
       registerClass(cls)

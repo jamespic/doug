@@ -31,7 +31,7 @@ class JsonSerializer(db: OObjectDatabaseTx) {
       fast"{${
         (for ((key, value) <- x) yield fast"${dumpFastring(key)}: ${dumpFastring(value)}") mkFastring ", "
       }}"
-    case x: scala.collection.Traversable[_] =>
+    case x: scala.collection.TraversableOnce[_] =>
       fast"[${x map dumpFastring mkFastring ", "}]"
     case x: Array[_] =>
       fast"[${x map dumpFastring mkFastring ", "}]"

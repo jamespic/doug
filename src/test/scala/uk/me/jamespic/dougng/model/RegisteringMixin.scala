@@ -11,9 +11,9 @@ trait RegisteringMixin extends OrientMixin {
       val tags = f.tags
       val text = f.text
       def apply() = {
-        util.registerClasses
+        util.initDB
         try f()
-        finally util.deregisterClasses
+        finally util.uninitDB
       }
     })
   }

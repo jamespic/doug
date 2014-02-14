@@ -41,7 +41,7 @@ object Sample {
   }
 
   def Test(name: String, startTime: Date)(implicit db: ODatabaseDocument) = {
-    val doc: Test = db.newInstance("DataSource")
+    val doc: Test = db.newInstance("Test")
     doc("name") = name
     doc("startTime") = startTime
   }
