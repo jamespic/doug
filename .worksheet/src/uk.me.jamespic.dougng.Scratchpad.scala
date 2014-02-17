@@ -29,28 +29,29 @@ object Scratchpad {
     sample.save
   });$skip(29); 
 
-  var dataset = new Dataset;System.out.println("""dataset  : <error> = """ + $show(dataset ));$skip(35); val res$1 = 
-  dataset.metric = "response_time";System.out.println("""res1: <error> = """ + $show(res$1));$skip(27); val res$2 = 
-  dataset.rowName = "name";System.out.println("""res2: <error> = """ + $show(res$2));$skip(27); val res$3 = 
-  dataset.table = "Sample";System.out.println("""res3: <error> = """ + $show(res$3));$skip(34); val res$4 = 
-  dataset.timestamp = "timestamp";System.out.println("""res4: <error> = """ + $show(res$4));$skip(29); 
+  var dataset = new Dataset;System.out.println("""dataset  : uk.me.jamespic.dougng.model.Dataset = """ + $show(dataset ));$skip(35); 
+  dataset.metric = "response_time";$skip(27); 
+  dataset.rowName = "name";$skip(27); 
+  dataset.table = "Sample";$skip(34); 
+  dataset.timestamp = "timestamp";$skip(29); 
   dataset = db.save(dataset);$skip(24); 
-  val dsId = dataset.id;System.out.println("""dsId  : <error> = """ + $show(dsId ));$skip(46); 
+  val dsId = dataset.id;System.out.println("""dsId  : String = """ + $show(dsId ));$skip(46); 
 
   implicit val sys = ActorSystem("MySystem");System.out.println("""sys  : akka.actor.ActorSystem = """ + $show(sys ));$skip(29); 
   val inbox = ActorDSL.inbox;System.out.println("""inbox  : akka.actor.ActorDSL.Inbox = """ + $show(inbox ));$skip(35); 
   implicit val self = inbox.getRef;System.out.println("""self  : akka.actor.ActorRef = """ + $show(self ));$skip(55); 
 
-  val dbActor = sys.actorOf(Props(new Database(uri)));System.out.println("""dbActor  : <error> = """ + $show(dbActor ));$skip(29); val res$5 = 
-  dbActor ! GetDataset(dsId);System.out.println("""res5: <error> = """ + $show(res$5));$skip(58); 
+  val dbActor = sys.actorOf(Props(new Database(uri)));System.out.println("""dbActor  : akka.actor.ActorRef = """ + $show(dbActor ));$skip(29); 
+  dbActor ! GetDataset(dsId);$skip(58); 
   val ActorCreated(dsActor, _) = inbox.receive(5 seconds);System.out.println("""dsActor  : akka.actor.ActorRef = """ + $show(dsActor ));$skip(21); 
-  dsActor ! ListenTo;$skip(62); val res$6 = 
-  timeit(inbox.receive(5 minutes) == DataUpdatedNotification);System.out.println("""res6: Boolean = """ + $show(res$6));$skip(111); 
+  dsActor ! ListenTo;$skip(62); val res$1 = 
+  timeit(inbox.receive(5 minutes) == DataUpdatedNotification);System.out.println("""res1: Boolean = """ + $show(res$1));$skip(111); 
   dsActor ! GetAllSummaries(for (i <- 1L to 100L) yield (i * 10000000L, i * 10000000L + 9909999L), "Response");$skip(63); 
-  val Summaries(result, _) = timeit(inbox.receive(30 seconds));System.out.println("""result  : Map[String,Map[(Long, Long),Option[uk.me.jamespic.dougng.util.DetailedStats]]] = """ + $show(result ));$skip(19); val res$7 = 
-  result("/").size;System.out.println("""res7: Int = """ + $show(res$7));$skip(111); 
+  val Summaries(result, _) = timeit(inbox.receive(30 seconds));System.out.println("""result  : Map[String,Map[(Long, Long),Option[uk.me.jamespic.dougng.util.DetailedStats]]] = """ + $show(result ));$skip(19); val res$2 = 
+  result("/").size;System.out.println("""res2: Int = """ + $show(res$2));$skip(111); 
   dsActor ! GetAllSummaries(for (i <- 1L to 100L) yield (i * 10000000L, i * 10000000L + 9909999L), "Response");$skip(64); 
-  val Summaries(result2, _) = timeit(inbox.receive(30 seconds));System.out.println("""result2  : Map[String,Map[(Long, Long),Option[uk.me.jamespic.dougng.util.DetailedStats]]] = """ + $show(result2 ));$skip(20); val res$8 = 
-  result2("/").size;System.out.println("""res8: Int = """ + $show(res$8));$skip(15); 
+  val Summaries(result2, _) = timeit(inbox.receive(30 seconds));System.out.println("""result2  : Map[String,Map[(Long, Long),Option[uk.me.jamespic.dougng.util.DetailedStats]]] = """ + $show(result2 ));$skip(20); val res$3 = 
+  result2("/").size;System.out.println("""res3: Int = """ + $show(res$3));$skip(23); 
+  Thread.sleep(60000L);$skip(15); 
   sys.shutdown}
 }

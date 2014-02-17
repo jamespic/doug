@@ -24,6 +24,8 @@ import org.scalatest.concurrent.Eventually
 import akka.actor.PoisonPill
 import akka.actor.ActorDSL
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.LinkedBlockingQueue
 
 
 class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
@@ -157,9 +159,43 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
   	  inbox2.receive(3 seconds) should equal(PleaseUpdate)
   	  instance.tell(AllDone, inbox2.getRef)
 	}
+
+	it("should avoid any notifications during exclusive access") {
+	  val instance = system.actorOf(Props(new Database(dbUri)))
+  	  val inbox1 = new LinkedBlockingQueue[Any]
+  	  val inbox2 = new LinkedBlockingQueue[Any]
+
+	  instance ! CreateDataDependentActor(_ => Props(new LeakyActor(inbox1)), "Inbox1")
+	  instance ! CreateDataDependentActor(_ => Props(new LeakyActor(inbox2)), "Inbox2")
+
+	  val ActorCreated(actor1, _) = expectMsgClass(classOf[ActorCreated])
+	  val ActorCreated(actor2, _) = expectMsgClass(classOf[ActorCreated])
+
+	  instance.tell(RequestExclusiveDatabaseAccess, actor1)
+	  instance.tell(RequestExclusiveDatabaseAccess, actor2)
+	  inbox1.poll(3, SECONDS) should equal(ExclusiveAccessGranted)
+	  inbox2.poll(3, SECONDS) should equal(null: AnyRef)
+
+	  instance.tell(PleaseRead, actor1)
+	  inbox2.poll(3, SECONDS) should equal(null: AnyRef)
+
+	  instance.tell(AllDone, actor1)
+	  inbox2.poll(3, SECONDS) should equal(PleaseRead)
+	  inbox2.poll(3, SECONDS) should equal(null: AnyRef)
+	  instance.tell(AllDone, actor2)
+	  inbox2.poll(3, SECONDS) should equal(ExclusiveAccessGranted)
+	  instance.tell(AllDone, actor2)
+	  inbox1.poll(3, SECONDS) should equal(null: AnyRef)
+	}
   }
 }
 
 class NoopActor extends Actor {
   def receive = {case _ => /* Do Nothing */}
+}
+
+class LeakyActor(q: BlockingQueue[Any]) extends Actor {
+  def receive = {
+    case x => q.put(x)
+  }
 }

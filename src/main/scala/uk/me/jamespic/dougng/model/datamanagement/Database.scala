@@ -63,7 +63,7 @@ class Database(url: String) extends Actor with ActorLogging {
   private def postponeUpdates: Receive = {
     case upd: PleaseUpdate if Some(sender) == masterActivity =>
       // Postpone update until after task complete
-      remindMeLaters ++= dataDependentChildren
+      remindMeLaters ++= dataDependentChildren -- masterActivity
     case AllDone | RemindMeLater =>
       dec(sender)
   }
