@@ -11,7 +11,6 @@ import uk.me.jamespic.dougng.util.DetailedStats
 import uk.me.jamespic.dougng.model.Dataset
 import scala.util.control.NonFatal
 import scala.concurrent.duration._
-import resource._
 import com.orientechnologies.orient.core.db.document.ODatabaseDocument
 import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 import com.orientechnologies.orient.core.id.ORecordId
