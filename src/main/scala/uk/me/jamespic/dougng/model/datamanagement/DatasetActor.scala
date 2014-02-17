@@ -62,7 +62,7 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
 
   override def preStart = {
     super.preStart
-    database ! RequestPermissionToUpdate
+    database ! RequestPermissionToRead
   }
 
   override def postStop = {
@@ -93,7 +93,7 @@ class DatasetActor(private var datasetId: String, dataFactory: => DataStore, poo
   }
 
   def base: Receive = {
-    case PleaseUpdate => initialise
+    case PleaseRead => initialise
     case DocumentsInserted(docs) => handleInsert(docs)
     case DatasetUpdate(ids) if ids contains dataset.id => initialise
     // Default, for an update message we don't care about

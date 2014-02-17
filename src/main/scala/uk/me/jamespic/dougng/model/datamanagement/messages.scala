@@ -19,6 +19,7 @@ case class GetDataset(recordId: String)
  * Message informing a parent that a DatasetActor thinks it needs to update itself,
  * probably because it was restarted
  */
+case object RequestPermissionToRead
 case object RequestPermissionToUpdate
 case object RequestExclusiveDatabaseAccess
 
@@ -31,7 +32,9 @@ case class DocumentsInserted(doc: Traversable[ODocument]) extends PleaseUpdate
 case class DocumentsDeleted(doc: Set[String]) extends PleaseUpdate
 case class DatasetUpdate(idsAffected: Set[String]) extends PleaseUpdate
 case class PresentationUpdate(idsAffected: Set[String]) extends PleaseUpdate
+case object PleaseRead extends PleaseUpdate
 case object PleaseUpdate extends PleaseUpdate
+case object ExclusiveAccessGranted extends PleaseUpdate
 
 /*
  * Messages from Data Dependent Actors to Database, either acknowledging requests,

@@ -53,10 +53,10 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  pool.url = dbUri
 
 	  val instance = system.actorOf(Props(new DatasetActor(datasetId, DataStore.memory, pool, self)))
-	  expectMsg(RequestPermissionToUpdate)
+	  expectMsg(RequestPermissionToRead)
 
 	  // Initialise
-	  instance ! PleaseUpdate
+	  instance ! PleaseRead
 	  expectMsg(5 seconds, AllDone)
 
 	  // Let's get some metadata
@@ -87,11 +87,11 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 	  instance ! GetAllInRange(101L, 101L, "req4")
 	  expectMsg(Ranges(Map("MyRow" -> Seq(101L -> 101.0)), "req4"))
 
-	  instance ! PleaseUpdate
+	  instance ! PleaseRead
 	  expectMsgAllOf(5 seconds, AllDone, DataUpdatedNotification)
 
 	  instance ! UnlistenTo
-	  instance ! PleaseUpdate
+	  instance ! PleaseRead
 	  expectMsg(5 seconds, AllDone)
 	  expectNoMsg(5 seconds)
 

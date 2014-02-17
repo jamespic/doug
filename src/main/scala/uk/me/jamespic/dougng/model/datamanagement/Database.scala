@@ -8,6 +8,7 @@ import scala.concurrent.Future
 import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 import scala.concurrent.Promise
 import uk.me.jamespic.dougng.model.DatasetName
+import scala.collection.JavaConversions._
 
 object Database {
   def dataFactory = DataStore.disk
@@ -21,6 +22,7 @@ class Database(url: String) extends Actor with ActorLogging {
   private val responseCounts = MMap.empty[ActorRef, Int].withDefault(_ => 0)
   private val bigOpQueue = new LinkedList[ActorRef]
   private val smallOpQueue = new LinkedList[ActorRef]
+  private val readQueue = new LinkedList[ActorRef]
   private var masterActivity: Option[ActorRef] = None
   private var remindMeLaters = Set.empty[ActorRef]
   private var dataDependentChildren = Set.empty[ActorRef]
@@ -30,6 +32,7 @@ class Database(url: String) extends Actor with ActorLogging {
   private def standardBehaviour: Receive = {
     case req: CreateDataDependentActor => createDDActor(req)
     case GetDataset(recordId) => getDataset(recordId)
+    case RequestPermissionToRead => readQueue push sender
     case RequestPermissionToUpdate => smallOpQueue push sender
     case RequestExclusiveDatabaseAccess => bigOpQueue push sender
     case Terminated(msg) => childTerminated
@@ -52,10 +55,21 @@ class Database(url: String) extends Actor with ActorLogging {
       messageAllChildren(upd)
     case AllDone =>
       dec(sender)
-//      if (masterActivity == Some(sender)) doRemindLaters
     case RemindMeLater =>
       dec(sender)
       remindMeLaters += sender
+  }
+
+  private def postponeUpdates: Receive = {
+    case upd: PleaseUpdate if Some(sender) == masterActivity =>
+      // Postpone update until after task complete
+      remindMeLaters ++= dataDependentChildren
+    case AllDone | RemindMeLater =>
+      dec(sender)
+  }
+
+  private def expectNoUpdates: Receive = {
+    case AllDone => dec(sender)
   }
 
   private def inc(actor: ActorRef) = responseCounts(actor) += 1
@@ -80,27 +94,37 @@ class Database(url: String) extends Actor with ActorLogging {
   }
 
   private def idle = standardBehaviour andThen canStartActivity
+  private def reading = {
+    (standardBehaviour orElse expectNoUpdates) andThen (_ => maybeRead) andThen canEndActivity
+  }
   private def smallOp = {
     (standardBehaviour orElse handleUpdates) andThen canEndActivity
   }
   private def bigOp = {
-    (standardBehaviour orElse handleUpdates) andThen canEndActivity
+    (standardBehaviour orElse postponeUpdates) andThen canEndActivity
   }
 
   private def canStartActivity: PartialFunction[Unit, Unit] = {case _ => maybeStartActivity}
   private def maybeStartActivity = {
-    maybeSmallOp || maybeBigOp
+    maybeRead || maybeSmallOp || maybeBigOp
   }
 
-  def maybeSmallOp = maybeNextInQueue(smallOpQueue, smallOp)
-  def maybeBigOp = maybeNextInQueue(bigOpQueue, bigOp)
+  def maybeRead: Boolean = {
+    if (!readQueue.isEmpty) {
+      readQueue foreach permitUpdate
+      context become reading
+      true
+    } else false
+  }
+  def maybeSmallOp = maybeNextInQueue(smallOpQueue, PleaseUpdate, smallOp)
+  def maybeBigOp = maybeNextInQueue(bigOpQueue, ExclusiveAccessGranted, bigOp)
 
-  private def canEndActivity: PartialFunction[Unit, Unit] = {case _ => maybeEndActivity}
-  private def maybeNextInQueue(q: Queue[ActorRef], andBecome: Receive) = {
+  private def canEndActivity: PartialFunction[Any, Unit] = {case _ => maybeEndActivity}
+  private def maybeNextInQueue(q: Queue[ActorRef], message: PleaseUpdate, andBecome: Receive) = {
     val nextOp = q.poll
     if (nextOp != null) {
       masterActivity = Some(nextOp)
-      nextOp ! PleaseUpdate
+      nextOp ! message
       inc(nextOp)
       context become andBecome
       true
@@ -108,7 +132,7 @@ class Database(url: String) extends Actor with ActorLogging {
   }
 
   private def permitUpdate(actor: ActorRef) = {
-    actor ! PleaseUpdate
+    actor ! PleaseRead
     inc(actor)
   }
 

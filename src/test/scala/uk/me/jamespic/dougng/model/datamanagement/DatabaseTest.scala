@@ -22,6 +22,8 @@ import akka.actor.Actor
 import java.util.concurrent.atomic.AtomicInteger
 import org.scalatest.concurrent.Eventually
 import akka.actor.PoisonPill
+import akka.actor.ActorDSL
+import java.util.concurrent.TimeoutException
 
 
 class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
@@ -127,6 +129,33 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
 	  instance ! RequestPermissionToUpdate
 	  expectMsg(PleaseUpdate)
 	  instance ! AllDone
+	}
+
+	it("should allow concurrent reads, but not concurrent updates") {
+  	  val instance = system.actorOf(Props(new Database(dbUri)))
+  	  val inbox1 = ActorDSL.inbox()
+  	  val inbox2 = ActorDSL.inbox()
+
+  	  instance.tell(RequestPermissionToRead, inbox1.getRef)
+  	  instance.tell(RequestPermissionToRead, inbox2.getRef)
+
+  	  inbox1.receive(3 seconds) should equal(PleaseRead)
+  	  inbox2.receive(3 seconds) should equal(PleaseRead)
+
+  	  instance.tell(AllDone, inbox1.getRef)
+  	  instance.tell(AllDone, inbox2.getRef)
+
+  	  instance.tell(RequestPermissionToUpdate, inbox1.getRef)
+  	  instance.tell(RequestPermissionToUpdate, inbox2.getRef)
+
+  	  inbox1.receive(3 seconds) should equal(PleaseUpdate)
+  	  intercept[TimeoutException] {
+  	    inbox2.receive(3 seconds)
+  	  }
+
+  	  instance.tell(AllDone, inbox1.getRef)
+  	  inbox2.receive(3 seconds) should equal(PleaseUpdate)
+  	  instance.tell(AllDone, inbox2.getRef)
 	}
   }
 }

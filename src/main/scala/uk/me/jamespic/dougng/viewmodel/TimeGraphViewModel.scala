@@ -38,7 +38,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool, database: Actor
   }
 
   private def handleDataUpdate(msg: PleaseUpdate) = msg match {
-    case PleaseUpdate => initialise
+    case PleaseRead => initialise
     case DatasetUpdate(ids) if ((ids & (receivedDatasets.keySet + recordId)).nonEmpty) => initialise
     case DocumentsDeleted(docs) if docs contains recordId => shutdown
     case _ => database ! AllDone
@@ -130,7 +130,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool, database: Actor
 
   override def preStart = {
     super.preStart
-    database ! RequestPermissionToUpdate
+    database ! RequestPermissionToRead
   }
 
   private class DatasetInfo(var actor: Option[ActorRef] = None,

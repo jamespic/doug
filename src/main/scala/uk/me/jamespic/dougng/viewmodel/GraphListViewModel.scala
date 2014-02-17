@@ -26,11 +26,11 @@ class GraphListViewModel(
   private var pendingGraphs = Map.empty[String, Graph]
 
   override def preStart = {
-    database ! RequestPermissionToUpdate
+    database ! RequestPermissionToRead
   }
 
   override def receive = super.receive orElse {
-    case PleaseUpdate | DocumentsInserted(_) => updateList
+    case PleaseRead | DocumentsInserted(_) => updateList
     case DatasetUpdate(datasets) => updates(datasets)
     case PresentationUpdate(datasets) => updates(datasets)
     case DocumentsDeleted(docs) => deleteRecords(docs)
