@@ -112,6 +112,7 @@ class Database(url: String) extends Actor with ActorLogging {
   def maybeRead: Boolean = {
     if (!readQueue.isEmpty) {
       readQueue foreach permitUpdate
+      readQueue.clear
       context become reading
       true
     } else false

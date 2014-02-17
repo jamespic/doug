@@ -48,7 +48,7 @@ class GraphListViewModelTest(_system: ActorSystem) extends TestKit(_system) with
 
       val rid2 = createDummyTimeGraph("Graph2")
 
-      database ! PleaseUpdate
+      database ! PleaseRead
       database ! AllDone
 
       val dataUpdate2 = expectMsgClass(classOf[DataChanged])
