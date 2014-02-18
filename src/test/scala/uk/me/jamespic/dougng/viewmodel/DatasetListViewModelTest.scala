@@ -13,9 +13,11 @@ import org.scalatest.BeforeAndAfter
 
 
 class DatasetListViewModelTest(_system: ActorSystem) extends TestKit(_system) with
-	FunSpecLike with ImplicitSender with Matchers with SimpleDataSet
+	FunSpecLike with ImplicitSender with Matchers
 	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
 
   def this() = this(ActorSystem("TestSystem"))
-
+  describe("A DatasetListViewModel") {
+    
+  }
 }

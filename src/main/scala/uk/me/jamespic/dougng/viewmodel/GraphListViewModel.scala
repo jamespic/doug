@@ -8,6 +8,7 @@ import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 import akka.actor.Props
 import uk.me.jamespic.dougng.model.datamanagement.RequestReadOnStart
 import akka.actor.Terminated
+import com.orientechnologies.orient.core.record.impl.ODocument
 
 object GraphListViewModel {
   type ViewModelFactory = PartialFunction[Graph, CreateDataDependentActor]
@@ -27,7 +28,8 @@ class GraphListViewModel(
   private var pendingGraphs = Map.empty[String, Graph]
 
   override def receive = super.receive orElse {
-    case PleaseRead | DocumentsInserted(_) => updateList
+    case PleaseRead => updateList
+    case DocumentsInserted(docs) => docsInserted(docs)
     case DatasetUpdate(datasets) => updates(datasets)
     case PresentationUpdate(datasets) => updates(datasets)
     case DocumentsDeleted(docs) => deleteRecords(docs)
@@ -51,8 +53,8 @@ class GraphListViewModel(
     for ((name, record) <- pendingGraphs; if docs contains record.id) {
       pendingGraphs -= name
     }
+    database ! AllDone
     if (updated) maybeFire
-    sender ! AllDone
   }
 
   private def updates(datasets: Set[String]) = {
@@ -67,8 +69,8 @@ class GraphListViewModel(
         pendingGraphs += name -> reload(db, graph)
       }
     }
+    database ! AllDone
     maybeFire
-    sender ! AllDone
   }
 
   private def maybeFire = if (pendingGraphs.isEmpty) fireUpdated(graphActors)
@@ -94,13 +96,21 @@ class GraphListViewModel(
     }
   }
 
-  private def updateList = {
+  private def docsInserted(docs: Traversable[ODocument]) = {
     for (db <- pool) {
-      val graphs: Iterable[Graph] = db.browseClass(classOf[Graph])
-      // Remove any graphs that no longer exist
-      graphActors = graphActors filter {case (rid, _) => graphs contains rid}
-      // Request ViewModels for any new graphs
-      val newGraphs = graphs
+      val graphs =
+        for (doc <- docs;
+             if doc.getSchemaClass.isSubClassOf("Graph")) yield {
+          val graph = db.getUserObjectByRecord(doc, "*:-1", false).asInstanceOf[Graph]
+          db.detachAll[Graph](graph, true)
+        }
+      createNewGraphs(db, graphs)
+    }
+    database ! AllDone
+  }
+
+  private def createNewGraphs(db: OObjectDatabaseTx, graphs: Traversable[Graph]) = {
+    val newGraphs = graphs
           .filter(x => !((graphActors contains x.id)
                            || (pendingGraphs contains x.id)))
       pendingGraphs ++= (for (graph <- newGraphs; if viewModelFactory isDefinedAt graph) yield {
@@ -108,8 +118,17 @@ class GraphListViewModel(
         database ! request
         request.name -> db.detachAll[Graph](graph, true)
       })
+  }
+
+  private def updateList = {
+    for (db <- pool) {
+      val graphs = (db.browseClass(classOf[Graph]): Iterable[Graph]).toSet
+      // Remove any graphs that no longer exist
+      graphActors = graphActors filter {case (rid, _) => graphs.map(_.id) contains rid}
+      // Request ViewModels for any new graphs
+      createNewGraphs(db, graphs)
     }
+    database ! AllDone
     maybeFire
-    sender ! AllDone
   }
 }
