@@ -48,6 +48,10 @@ class Database(url: String) extends Actor with ActorLogging {
     dataDependentChildren -= actor
     remindMeLaters -= actor
     responseCounts -= actor
+    actor.path.name match {
+      case DatasetName(recordId) => datasets -= recordId
+      case _ => // Do nothing
+    }
   }
 
   private def handleUpdates: Receive = {

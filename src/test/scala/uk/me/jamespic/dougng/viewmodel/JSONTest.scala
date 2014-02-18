@@ -11,6 +11,14 @@ import scala.collection.JavaConversions._
 import uk.me.jamespic.dougng.model.TimeGraph
 import java.awt.Color
 import scala.collection.SortedMap
+import akka.actor.{ActorSystem, Actor, ActorRef, Props, Identify}
+import akka.actor.ActorDSL
+import scala.concurrent.duration._
+import akka.serialization.Serialization
+import akka.serialization.SerializationExtension
+import java.util.GregorianCalendar
+import java.util.Calendar
+import java.util.TimeZone
 
 
 class JSONTest extends FunSpec with Matchers with RegisteringMixin
@@ -44,6 +52,23 @@ class JSONTest extends FunSpec with Matchers with RegisteringMixin
       instance.dumps(Set("Hello", "World")) should equal("[\"Hello\", \"World\"]")
     }
 
+    it("should serialize Dates") {
+      import Calendar._
+      val instance = new JsonSerializer(db)
+      val calendar = new GregorianCalendar(1985, OCTOBER, 26, 1, 35, 0)
+      calendar.setTimeZone(TimeZone.getTimeZone("UTC"))
+      val date = calendar.getTime()
+      instance.dumps(date) should equal("""{"class": "Date", "value": "1985-10-26T01:35:00.000Z"}""")
+    }
+
+    it("should serialize Calendars") {
+      import Calendar._
+      val instance = new JsonSerializer(db)
+      val calendar = new GregorianCalendar(1985, OCTOBER, 26, 1, 35, 0)
+      calendar.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"))
+      instance.dumps(calendar) should equal("""{"class": "Calendar", "value": "1985-10-26T01:35:00.000-07"}""")
+    }
+
     it("should serialize case classes") {
       val instance = new JsonSerializer(db)
       instance.dumps(TestClass(1)) should equal("{\"class\": \"TestClass\", \"a\": 1}")
@@ -71,6 +96,28 @@ class JSONTest extends FunSpec with Matchers with RegisteringMixin
       timegraph.rowColours.put("Row1", "#f00")
       timegraph = db.save(timegraph)
       instance.dumps(timegraph) should fullyMatch regex("""\{"@rid":"#\d+:\d+","@version":0,"@class":"TimeGraph","granularity":20000,"maxDatasets":\[\],"datasets":\[\],"hiddenRows":\["Row1"\],"rowColours":\{"Row1":"#f00"\},"name":"MyTimeGraph"\}""")
+    }
+
+    it("should serialize ActorRefs") {
+      val instance = new JsonSerializer(db)
+      implicit val system = ActorSystem("TestSystem")
+      val actorRef = system.actorOf(Props(new Actor {def receive = {case x => sender ! x}}))
+      val serialized = instance.dumps(actorRef)
+      val ExpectedPattern = """\{"class": "ActorRef", "path":"([^"]+)"\}""".r
+      val ExpectedPattern(path) = serialized.replace("\\/", "/")
+      println(path)
+      val serialization = SerializationExtension(system)
+      val actorRef2 = serialization.system.provider.resolveActorRef(path)
+      actorRef should equal(actorRef2)
+      implicit val inbox = ActorDSL.inbox()
+      actorRef2.tell("ping", inbox.getRef)
+      inbox.receive(3 seconds) should equal("ping")
+      system.shutdown
+    }
+
+    it("should serialize specialised case classes") {
+      val instance = new JsonSerializer(db)
+      instance.dumps((1,1)) should equal("""{"class": "Tuple2", "_1": 1, "_2": 1}""")
     }
 
     it("should refuse to serialize anything else") {
