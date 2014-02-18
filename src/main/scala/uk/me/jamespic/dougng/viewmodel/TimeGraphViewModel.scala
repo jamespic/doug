@@ -10,6 +10,7 @@ import scala.collection.SortedMap
 import uk.me.jamespic.dougng.util.DetailedStats
 import akka.actor.Props
 import uk.me.jamespic.dougng.model.TimeGraphViewModelName
+import uk.me.jamespic.dougng.model.datamanagement.RequestReadOnStart
 
 object TimeGraphViewModel {
   def constructMsg(recordId: String) = {
@@ -20,7 +21,8 @@ object TimeGraphViewModel {
   }
 }
 
-class TimeGraphViewModel(recordId: String, pool: ReplacablePool, database: ActorRef) extends SubscribableVariable {
+class TimeGraphViewModel(recordId: String, pool: ReplacablePool, protected val database: ActorRef)
+    extends SubscribableVariable with RequestReadOnStart {
   type Row = SortedMap[(Long, Long), Double]
   type Table = SortedMap[String, Row]
   import context.dispatcher
@@ -126,11 +128,6 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool, database: Actor
       val rows = dsInfo.metadata.get.rows
       actor ! GetSummaries(rows, ranges, version)
     }
-  }
-
-  override def preStart = {
-    super.preStart
-    database ! RequestPermissionToRead
   }
 
   private class DatasetInfo(var actor: Option[ActorRef] = None,

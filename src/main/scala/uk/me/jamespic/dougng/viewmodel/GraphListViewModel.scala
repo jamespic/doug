@@ -6,6 +6,8 @@ import uk.me.jamespic.dougng.model.datamanagement._
 import uk.me.jamespic.dougng.model.Graph
 import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 import akka.actor.Props
+import uk.me.jamespic.dougng.model.datamanagement.RequestReadOnStart
+import akka.actor.Terminated
 
 object GraphListViewModel {
   type ViewModelFactory = PartialFunction[Graph, CreateDataDependentActor]
@@ -15,19 +17,14 @@ object GraphListViewModel {
   }
 }
 
-//FIXME: Test This
 class GraphListViewModel(
     viewModelFactory: GraphListViewModel.ViewModelFactory,
     pool: ReplacablePool,
-    database: ActorRef) extends SubscribableVariable {
+    protected val database: ActorRef) extends SubscribableVariable with RequestReadOnStart {
   import GraphListViewModel._
 
   private var graphActors = Map.empty[String, GraphInfo]
   private var pendingGraphs = Map.empty[String, Graph]
-
-  override def preStart = {
-    database ! RequestPermissionToRead
-  }
 
   override def receive = super.receive orElse {
     case PleaseRead | DocumentsInserted(_) => updateList
@@ -35,6 +32,7 @@ class GraphListViewModel(
     case PresentationUpdate(datasets) => updates(datasets)
     case DocumentsDeleted(docs) => deleteRecords(docs)
     case ActorCreated(actorRef, name) => actorCreated(actorRef, name)
+    case Terminated(actor) => handleTermination(actor)
   }
 
   private def reload(db: OObjectDatabaseTx, graph: Graph) = {
@@ -79,13 +77,29 @@ class GraphListViewModel(
     pendingGraphs.get(name) map {record =>
       pendingGraphs -= name
       graphActors += record.id -> GraphInfo(record, actorRef)
+      context.watch(actorRef)
       maybeFire
+    }
+  }
+
+  private def handleTermination(actor: ActorRef) = {
+    /*
+     * If we detect premature termination of an actor, we remove it
+     * from our list and request permission to update.
+     */
+    val affected = graphActors.filter(actor ==  _._2.actorRef)
+    if (affected.nonEmpty) {
+      graphActors --= affected.keys
+      database ! RequestPermissionToRead
     }
   }
 
   private def updateList = {
     for (db <- pool) {
       val graphs: Iterable[Graph] = db.browseClass(classOf[Graph])
+      // Remove any graphs that no longer exist
+      graphActors = graphActors filter {case (rid, _) => graphs contains rid}
+      // Request ViewModels for any new graphs
       val newGraphs = graphs
           .filter(x => !((graphActors contains x.id)
                            || (pendingGraphs contains x.id)))
@@ -95,6 +109,7 @@ class GraphListViewModel(
         request.name -> db.detachAll[Graph](graph, true)
       })
     }
+    maybeFire
     sender ! AllDone
   }
 }

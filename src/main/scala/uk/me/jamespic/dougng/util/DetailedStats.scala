@@ -2,6 +2,7 @@ package uk.me.jamespic.dougng.util
 
 import org.apache.commons.math3.stat.descriptive.StatisticalSummary
 
+
 case class DetailedStats(stats: Stats, histogram: Histogram) extends StatisticalSummary {
   def getMax(): Double = stats.max
   def getMean(): Double = stats.avg

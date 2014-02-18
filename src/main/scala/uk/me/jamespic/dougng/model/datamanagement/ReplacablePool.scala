@@ -45,6 +45,8 @@ class ReplacablePool {
     }
   }
 
+  def flatMap[X](f: OObjectDatabaseTx => X) = map(f)
+
   private def withWriteLock[X] = withLock[X](lock.writeLock) _
   private def withReadLock[X] = withLock[X](lock.writeLock) _
 

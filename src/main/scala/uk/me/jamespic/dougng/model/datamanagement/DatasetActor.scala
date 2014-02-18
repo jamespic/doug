@@ -33,8 +33,11 @@ object DatasetActor {
   }
 }
 
-class DatasetActor(private var datasetId: String, dataFactory: => DataStore, pool: ReplacablePool, database: ActorRef)
-    extends Actor with Stash {
+class DatasetActor(private var datasetId: String,
+    dataFactory: => DataStore,
+    pool: ReplacablePool,
+    protected val database: ActorRef)
+    extends Actor with Stash with RequestReadOnStart {
   import DatasetActor._
   private var dataOpt: Option[DataStore] = None
   private var listeners = Set.empty[ActorRef]

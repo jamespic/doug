@@ -54,18 +54,19 @@ class JsonSerializer(db: OObjectDatabaseTx) {
       fast"""{"class": "Calendar", "value": ${dumpFastring(formatter.format(x.getTime))}}"""
     case x: scala.collection.Map[_,_] =>
       fast"{${
-        (for ((key, value) <- x) yield fast"${dumpFastring(key)}: ${dumpFastring(value)}") mkFastring ", "
+        (for ((key, value) <- x.view) yield fast"${dumpFastring(key)}: ${dumpFastring(value)}") mkFastring ", "
       }}"
-    case x: scala.collection.TraversableOnce[_] =>
+    case x: Traversable[_] =>
+      fast"[${x.view map dumpFastring mkFastring ", "}]"
+    case x: Iterator[_] =>
       fast"[${x map dumpFastring mkFastring ", "}]"
     case x: Array[_] =>
-      fast"[${x map dumpFastring mkFastring ", "}]"
+      fast"[${x.view map dumpFastring mkFastring ", "}]"
     case x: ODocument =>
       Fastring(orientSerializer.toString(x, "indent:0,fetchPlan:*:-1,rid,version,class,keepTypes").toString)
     case x: ActorRef =>
       fast"""{"class": "ActorRef", "path":${dumpFastring(x.path.toSerializationFormat)}}"""
     case x: Product => // Case classes
-      //TODO: Specialised case classes (with name mangling) aren't currently supported
       val clazz = x.getClass
       fast"{${
         (fast"${'"'}class${'"'}: ${dumpFastring(deSpecialise(clazz.getSimpleName()))}") +:

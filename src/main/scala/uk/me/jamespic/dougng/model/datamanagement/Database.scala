@@ -9,6 +9,7 @@ import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 import scala.concurrent.Promise
 import uk.me.jamespic.dougng.model.DatasetName
 import scala.collection.JavaConversions._
+import akka.actor.SupervisorStrategy
 
 object Database {
   def dataFactory = DataStore.disk
@@ -16,6 +17,8 @@ object Database {
 
 class Database(url: String) extends Actor with ActorLogging {
   import Database._
+  override val supervisorStrategy = SupervisorStrategy.stoppingStrategy
+
   private val pool = new ReplacablePool
   pool.url = url
 
@@ -35,11 +38,11 @@ class Database(url: String) extends Actor with ActorLogging {
     case RequestPermissionToRead => readQueue push sender
     case RequestPermissionToUpdate => smallOpQueue push sender
     case RequestExclusiveDatabaseAccess => bigOpQueue push sender
-    case Terminated(msg) => childTerminated
+    case Terminated(child) => childTerminated(child)
   }
 
-  private def childTerminated = {
-    forget(sender)
+  private def childTerminated(child: ActorRef) = {
+    forget(child)
     maybeEndActivity
   }
 

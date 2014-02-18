@@ -23,7 +23,7 @@ class TimeGraphViewModelTest(_system: ActorSystem) extends TestKit(_system) with
 	with RegisteringMixin with GivenWhenThen with BeforeAndAfterAll with BeforeAndAfter {
 
   def this() = this(ActorSystem("TestSystem"))
-  val timeout = 5 days
+  val timeout = 5 seconds
 
   describe("A TimeGraphViewModel") {
     it("should provide a subscribable view of Time Graph data") {
