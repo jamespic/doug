@@ -9,7 +9,8 @@ object Allocator {
          if MappedPlatforms contains (platform, bits)) yield {
       new MappedAllocator
     }) getOrElse {
-      new ChannelAllocator
+      //new ChannelAllocator
+      new PageCacheAllocator
     }
   }
 }

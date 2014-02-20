@@ -47,7 +47,7 @@ object Scratchpad {
   dsActor ! ListenTo;$skip(62); val res$1 = 
   timeit(inbox.receive(5 minutes) == DataUpdatedNotification);System.out.println("""res1: Boolean = """ + $show(res$1));$skip(111); 
   dsActor ! GetAllSummaries(for (i <- 1L to 100L) yield (i * 10000000L, i * 10000000L + 9909999L), "Response");$skip(63); 
-  val Summaries(result, _) = timeit(inbox.receive(30 seconds));System.out.println("""result  : Map[String,Map[(Long, Long),Option[uk.me.jamespic.dougng.util.DetailedStats]]] = """ + $show(result ));$skip(19); val res$2 = 
+  val Summaries(result, _) = timeit(inbox.receive(90 seconds));System.out.println("""result  : Map[String,Map[(Long, Long),Option[uk.me.jamespic.dougng.util.DetailedStats]]] = """ + $show(result ));$skip(19); val res$2 = 
   result("/").size;System.out.println("""res2: Int = """ + $show(res$2));$skip(111); 
   dsActor ! GetAllSummaries(for (i <- 1L to 100L) yield (i * 10000000L, i * 10000000L + 9909999L), "Response");$skip(64); 
   val Summaries(result2, _) = timeit(inbox.receive(30 seconds));System.out.println("""result2  : Map[String,Map[(Long, Long),Option[uk.me.jamespic.dougng.util.DetailedStats]]] = """ + $show(result2 ));$skip(20); val res$3 = 

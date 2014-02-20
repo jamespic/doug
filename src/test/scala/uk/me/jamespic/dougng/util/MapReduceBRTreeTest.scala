@@ -66,7 +66,7 @@ class MapReduceBRTreeTest extends FunSpecLike with Matchers with GivenWhenThen {
     }
 
     it("should be fast") {
-      val alloc = new MappedAllocator()
+      val alloc = new PageCacheAllocator()
       val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
 
       time {
@@ -74,10 +74,11 @@ class MapReduceBRTreeTest extends FunSpecLike with Matchers with GivenWhenThen {
           instance += i -> i
         }
       }
+      time (instance.summary)
     }
 
     it("should be fast with random data") {
-      val alloc = new MappedAllocator()
+      val alloc = new PageCacheAllocator()
       val instance = new MapReduceBRTree[Long, Long, Long](sum _, sum _)(alloc)
       val rand = new java.util.Random
 
@@ -87,6 +88,7 @@ class MapReduceBRTreeTest extends FunSpecLike with Matchers with GivenWhenThen {
           instance += j -> j
         }
       }
+      time (instance.summary)
     }
   }
 }

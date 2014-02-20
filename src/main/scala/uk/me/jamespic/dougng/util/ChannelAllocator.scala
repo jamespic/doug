@@ -7,28 +7,11 @@ object ChannelAllocator {
   private val InternalBufferSize = 8192
 }
 
-class ChannelAllocator extends Allocator {self =>
-  type HandleType = Long
-  val handleSerializer = implicitly[Serializer[HandleType]]
-  val nullHandle = -1L
-  private val file = new FileHolder()
-  private var freeList = Map.empty[Int, List[Long]]
-  private var limit = 0L
+class ChannelAllocator extends AbstractFileAllocator {self =>
   private val buf = ByteBuffer.allocate(ChannelAllocator.InternalBufferSize)
 
   def apply(size: Int) = self.synchronized {
-    val start = if (freeList contains size) {
-      val s :: tail = freeList(size)
-      tail match {
-        case Nil => freeList -= size
-        case t => freeList += size -> t
-      }
-      s
-    } else {
-      val s = limit
-      limit += size
-      s
-    }
+    val start = allocate(size)
     new ChannelStorage(start, size).zero
   }
 
@@ -39,24 +22,6 @@ class ChannelAllocator extends Allocator {self =>
 
   def storage(handle: Long, size: Int) = self.synchronized {
     new ChannelStorage(handle, size)
-  }
-
-  def close = self.synchronized {
-    file.close
-    freeList = Map.empty
-  }
-
-  override def toString = self.synchronized {
-    if (file.channel != null) {
-      s"<ChannelAllocator: File: ${file.file}, $fragmentation% fragmented>"
-    } else {
-      "<Closed ChannelAllocator>"
-    }
-  }
-
-  def fragmentation = self.synchronized {
-    val freeSize = (freeList.map {case (size, list) => size.toLong * list.size.toLong}).sum
-    100.0f * freeSize / limit
   }
 
   class ChannelStorage(start: Long, size: Int) extends Storage {
@@ -118,9 +83,7 @@ class ChannelAllocator extends Allocator {self =>
     def free: Unit = self.synchronized {
       checkValid
       valid = false
-      if (size > 0) {
-        freeList += size -> (start :: freeList.getOrElse(size, Nil))
-      }
+      doFree(start, size)
     }
 
     override def toString = self.synchronized {
