@@ -1,3 +1,4 @@
+syntax: glob
 .settings
 .cache
 bin
@@ -16,3 +17,4 @@ dist
 /.project
 /RUNNING_PID
 /*.class
+.orientdb_history
