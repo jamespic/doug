@@ -26,7 +26,7 @@ trait SubscribableVariable extends Actor {
   override def receive = {
     case Subscribe(updateId) => subscribe(updateId, sender)
     case Unsubscribe => unsubscribe(sender)
-    case Terminated(ref) => unsubscribe(ref)
+    case Terminated(ref) if listeners contains ref => unsubscribe(ref)
   }
 
   private def subscribe(updateId: Option[Long], ref: ActorRef) = {
@@ -40,8 +40,8 @@ trait SubscribableVariable extends Actor {
   }
 
   private def unsubscribe(ref: ActorRef) = {
-	listeners -= ref
-	onUnsubscribe(ref)
+	  listeners -= ref
+	  onUnsubscribe(ref)
   }
 
   protected def onSubscribe(ref: ActorRef): Unit = {}
