@@ -10,12 +10,12 @@ class Struct[S <: Struct[S]](val storage: Allocator#Storage, private val offset:
   def free = storage.free
 
   protected final def __var__[X](implicit ser: Serializer[X]) = {
-    val newVar = new Variable(offset + _size)
+    val newVar = new Variable[X](offset + _size)
     _size += ser.size
     newVar
   }
 
-  protected final def __struct__[X <: Struct[X]](implicit info: StructInfo[X]) = {
+  protected final def __struct__[X <: Struct[X]](implicit info: StructInfo[X]): X = {
     val newStruct = info.cons(storage, offset + _size)
     _size += info.size
     newStruct

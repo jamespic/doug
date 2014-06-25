@@ -62,11 +62,6 @@ class DatasetActor(private var datasetId: String,
     }
   }
 
-  override def preStart = {
-    super.preStart
-    database ! RequestPermissionToRead
-  }
-
   override def postStop = {
     invalidate
     super.postStop

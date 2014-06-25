@@ -23,7 +23,7 @@ object SubscribableVariable {
 trait SubscribableVariable extends Actor {
   private var listeners = Set.empty[ActorRef]
   private var lastUpdate: Option[DataChanged] = None
-  def receive = {
+  override def receive = {
     case Subscribe(updateId) => subscribe(updateId, sender)
     case Unsubscribe => unsubscribe(sender)
     case Terminated(ref) => unsubscribe(ref)
