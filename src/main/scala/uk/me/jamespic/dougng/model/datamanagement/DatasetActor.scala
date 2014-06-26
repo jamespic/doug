@@ -1,8 +1,9 @@
 package uk.me.jamespic.dougng.model.datamanagement
 
 import akka.actor.{Actor, ActorRef, Stash, Terminated}
-import com.orientechnologies.orient.core.command.{OBasicCommandContext,OCommandContext}
+import com.orientechnologies.orient.core.command.{OCommandResultListener, OBasicCommandContext, OCommandContext}
 import com.orientechnologies.orient.core.sql.filter.{OSQLTarget, OSQLFilter}
+import com.orientechnologies.orient.core.sql.query.OSQLAsynchQuery
 import scala.collection.JavaConversions._
 import com.orientechnologies.orient.core.record.impl.ODocument
 import scala.collection.mutable.{Map => MMap}
@@ -52,14 +53,8 @@ class DatasetActor(private var datasetId: String,
   }
 
   private def updateClassInsertHandler {
-    classInsertHandler = try {
-      val parsed = new OSQLTarget(dataset.table, null, null)
-      if (parsed.getTargetClasses() != null) {
-        Some(new ClassInsertHandler(parsed.getTargetClasses.values.toSet))
-      } else None
-    } catch {
-      case NonFatal(_) => None // If we fail, for any reason, no class browsing
-    }
+    // Special-case selection from classes, so we can handle inserts deterministically
+    classInsertHandler = classes map (classSet => new ClassInsertHandler(classSet))
   }
 
   override def postStop = {
@@ -193,22 +188,24 @@ class DatasetActor(private var datasetId: String,
     }
   }
 
-  private def browse(db: ODatabaseDocument, context: OCommandContext): Iterable[ODocument] =
-  catchingOException(Iterable.empty[ODocument]){
-    val parsed = new OSQLTarget(dataset.table, context, null)
+  private def browse(db: ODatabaseDocument, context: OCommandContext): Traversable[ODocument] =
+  catchingOException(Traversable.empty[ODocument]){
+    classes match {
+      case Some(classSet) =>
+        for (clazz <- classSet;
+             doc <- (db.browseClass(clazz): Iterable[ODocument])) yield doc
+      case None =>
+        import uk.me.jamespic.dougng.model.util.ObjectDBPimp
+        db.asyncSql(s"select * from ${dataset.table}") // Not SQL injection safe, but users can already execute arbitrary SQL
+    }
+  }
 
-    if (parsed.getTargetClasses() != null) {
-      for (clazz <- parsed.getTargetClasses().values().view;
-           doc <- (db.browseClass(clazz): Iterable[ODocument])) yield doc
-    } else if (parsed.getTargetRecords() != null) {
-      parsed.getTargetRecords().view.map (_.getRecord())
-    } else if (parsed.getTargetClusters() != null) {
-      for (cluster <- parsed.getTargetClusters().values().view;
-           doc <- (db.browseCluster[ODocument](cluster): Iterable[ODocument])) yield doc
-    } else if (parsed.getTargetIndex() != null) {
-      db.getMetadata().getIndexManager().getIndex(parsed.getTargetIndex()).getEntriesBetween(null, null): Iterable[ODocument]
-    } else {
-      Iterable.empty[ODocument]
+  private def classes = {
+    try {
+      val parsed = new OSQLTarget(dataset.table, null, null)
+      Option(parsed.getTargetClasses) map (_.values.toSet)
+    } catch {
+      case NonFatal(_) => None // If we fail, for any reason, no class browsing
     }
   }
 

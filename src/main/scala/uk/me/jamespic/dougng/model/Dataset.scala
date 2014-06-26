@@ -15,5 +15,6 @@ class Dataset {
   var timestamp: String = "timestamp"
   var table: String = "Sample"
   var whereClause: String = "true"
+
   @Version var version: String = _
 }
