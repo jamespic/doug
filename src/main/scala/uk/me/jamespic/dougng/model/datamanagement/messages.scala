@@ -1,6 +1,6 @@
 package uk.me.jamespic.dougng.model.datamanagement
 import com.orientechnologies.orient.core.record.impl.ODocument
-import uk.me.jamespic.dougng.util.DetailedStats
+import uk.me.jamespic.dougng.util.Stats
 import akka.actor.{Props, ActorRef}
 
 /*
@@ -57,7 +57,7 @@ case class GetSummaries(rows: Iterable[String], ranges: Iterable[(Long, Long)], 
 case class GetInRange(rows: Iterable[String], from: Long, to: Long, corrId: Any = null)
 case class GetAllInRange(from: Long, to: Long, corrId: Any = null)
 case class Metadata(min: Long, max: Long, rows: Set[String], corrId: Any = null)
-case class Summaries(result: Map[String, Map[(Long, Long), Option[DetailedStats]]], corrId: Any = null)
+case class Summaries(result: Map[String, Map[(Long, Long), Option[Stats]]], corrId: Any = null)
 case class Ranges(result: Map[String, Iterable[(Long, Double)]], corrId: Any = null)
 case class GetLastError(corrId: Any = null)
 case class LastError(ex: Option[Throwable], corrId: Any = null)

@@ -172,14 +172,15 @@ object Histogram {
 
   implicit object HistogramSerializer extends Serializer[Histogram] {
     import Serializer.sizeof
+    private val doubleRepSerializer: Serializer[DoubleRep] = implicitly
     private val arraySerializer = new Serializer.FixedCollectionSerializer[Int, Array[Int]](bars)
     val size = sizeof[DoubleRep] + bars * sizeof[Int]
     def serialize(value: Histogram, buffer: ByteBuffer): Unit = {
-      DoubleRep.DoubleRepSerializer.serialize(value.start, buffer)
+      doubleRepSerializer.serialize(value.start, buffer)
       arraySerializer.serialize(value.data, buffer)
     }
     def deserialize(buffer: ByteBuffer): Histogram = {
-      val start = DoubleRep.DoubleRepSerializer.deserialize(buffer)
+      val start = doubleRepSerializer.deserialize(buffer)
       val data = arraySerializer.deserialize(buffer)
       new Histogram(start, data)
     }

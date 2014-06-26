@@ -21,7 +21,7 @@ libraryDependencies ++=  Seq(
   "org.scalatest" % "scalatest_2.10" % "2.2.0" % "test",
   "com.typesafe.akka" %% "akka-actor" % "2.3.3",
   "com.typesafe.akka" %% "akka-testkit" % "2.3.3",
-  "com.chuusai" %% "shapeless" % "1.2.4",
+  "com.chuusai" % "shapeless" % "2.0.0" cross CrossVersion.full,
   "org.apache.commons" % "commons-math3" % "3.3",
   "com.dongxiguo" %% "fastring" % "0.2.4"
 )

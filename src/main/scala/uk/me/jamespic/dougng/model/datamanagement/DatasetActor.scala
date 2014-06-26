@@ -8,7 +8,7 @@ import scala.collection.JavaConversions._
 import com.orientechnologies.orient.core.record.impl.ODocument
 import scala.collection.mutable.{Map => MMap}
 import uk.me.jamespic.dougng.util.MutableMapReduce
-import uk.me.jamespic.dougng.util.DetailedStats
+import uk.me.jamespic.dougng.util.Stats
 import uk.me.jamespic.dougng.model.Dataset
 import scala.util.control.NonFatal
 import scala.concurrent.duration._

@@ -126,6 +126,4 @@ object DoubleRep {
       normalise(unsignedSignificand << 1, exponent - 1)
     }
   }
-
-  implicit val DoubleRepSerializer = Serializer.caseClassSerializer(DoubleRep.apply(_: Long, _: Int), DoubleRep.unapply(_: DoubleRep))
 }

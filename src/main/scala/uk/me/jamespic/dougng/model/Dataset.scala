@@ -6,7 +6,6 @@ import util._
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable.{Map => MMap}
 import java.util.Date
-import uk.me.jamespic.dougng.util.Average
 
 class Dataset {
   @Id var id: String = _

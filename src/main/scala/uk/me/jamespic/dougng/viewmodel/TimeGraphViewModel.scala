@@ -7,7 +7,7 @@ import uk.me.jamespic.dougng.model.TimeGraph
 import scala.collection.JavaConversions._
 import uk.me.jamespic.dougng.model.DatasetName
 import scala.collection.SortedMap
-import uk.me.jamespic.dougng.util.DetailedStats
+import uk.me.jamespic.dougng.util.Stats
 import akka.actor.Props
 import uk.me.jamespic.dougng.model.TimeGraphViewModelName
 import uk.me.jamespic.dougng.model.datamanagement.RequestReadOnStart
@@ -132,5 +132,5 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool, protected val d
 
   private class DatasetInfo(var actor: Option[ActorRef] = None,
       var metadata: Option[Metadata] = None,
-      var data: Option[Map[String, Map[(Long, Long), Option[DetailedStats]]]] = None)
+      var data: Option[Map[String, Map[(Long, Long), Option[Stats]]]] = None)
 }

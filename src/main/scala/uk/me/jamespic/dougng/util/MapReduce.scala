@@ -16,14 +16,6 @@ object MapReduce {
 object MapReduceAlgorithm {
   import MapReduce._
   implicit def sumAlgo[A: Numeric] = MapReduceAlgorithm(sum[A] _, sum[A] _)
-  implicit def combineAlgo[D, T <: Combinable[D, T]](implicit start: Start[D, T] with T) = MapReduceAlgorithm(
-      mapReduce = {l: Traversable[D] =>
-        Some(((start: T) /: l){_ + _})
-      },
-      reReduce = {l: Traversable[T] =>
-      	Some(((start: T) /: l){_ ++ _})
-      }
-  )
 }
 
 case class MapReduceAlgorithm[V, S](mapReduce: Traversable[V] => Option[S],

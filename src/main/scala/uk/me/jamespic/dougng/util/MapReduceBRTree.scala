@@ -1,5 +1,7 @@
 package uk.me.jamespic.dougng.util
 
+import shapeless.{Generic, HNil}
+
 import scala.collection.mutable.ListBuffer
 import scala.collection.BitSet
 import scala.annotation.tailrec
@@ -39,6 +41,9 @@ object MapReduceBRTree {
 
   private val dummyFn = {(e: Any) => ()}
 
+  private def pairSerializer[K: Serializer, V: Serializer] = {
+    implicitly[Serializer[(K, V)]]
+  }
 }
 
 class MapReduceBRTree[K, V, S]
@@ -53,6 +58,9 @@ class MapReduceBRTree[K, V, S]
   private val bufferSize = MapReduceBRTree.DefaultBufferSize
   private implicit val kOrdering = Ordering.by[(K, V), K](_._1)
   private implicit val hSer = alloc.handleSerializer
+  // Shapeless gets lost in a tarpit of serializers
+  private implicit val kvSerializer = pairSerializer[K, V]
+  private implicit val sOptSerializer = Serializer.optionSerializer[S]
 
   private lazy implicit val pointerInfo = StructInfo(new Pointer(_, _))
   private lazy implicit val branchInfo = StructInfo(new Branch(_, _))
