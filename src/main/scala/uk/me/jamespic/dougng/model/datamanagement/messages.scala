@@ -25,13 +25,14 @@ case object RequestExclusiveDatabaseAccess
 
 /*
  * Messages from Database to Data Dependent Actors, informing them of data changes, and allowing
- * them to act on them
+ * them to act on them.
  */
 sealed trait PleaseUpdate
-case class DocumentsInserted(doc: Traversable[ODocument]) extends PleaseUpdate
-case class DocumentsDeleted(doc: Set[String]) extends PleaseUpdate
-case class DatasetUpdate(idsAffected: Set[String]) extends PleaseUpdate
-case class PresentationUpdate(idsAffected: Set[String]) extends PleaseUpdate
+sealed trait ForwardableUpdateInfo extends PleaseUpdate
+case class DocumentsInserted(doc: Traversable[ODocument]) extends ForwardableUpdateInfo
+case class DocumentsDeleted(doc: Set[String]) extends ForwardableUpdateInfo
+case class DatasetUpdate(idsAffected: Set[String]) extends ForwardableUpdateInfo
+case class PresentationUpdate(idsAffected: Set[String]) extends ForwardableUpdateInfo
 case object PleaseRead extends PleaseUpdate
 case object PleaseUpdate extends PleaseUpdate
 case object ExclusiveAccessGranted extends PleaseUpdate

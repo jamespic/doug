@@ -122,7 +122,7 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
       instance ! RequestPermissionToUpdate
       expectMsg(PleaseUpdate)
       // Send PleaseUpdate - this should be forwarded to everything, including badActor, which won't respond
-      instance ! PleaseUpdate
+      instance ! DatasetUpdate(Set.empty)
       badActor ! PoisonPill
       instance ! AllDone
       eventually {responseCount.intValue should equal(3)}
@@ -176,7 +176,7 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
       inbox1.poll(3, SECONDS) should equal(ExclusiveAccessGranted)
       inbox2.poll(3, SECONDS) should equal(null: AnyRef)
 
-      instance.tell(PleaseRead, actor1)
+      instance.tell(DatasetUpdate(Set.empty), actor1)
       inbox2.poll(3, SECONDS) should equal(null: AnyRef)
 
       instance.tell(AllDone, actor1)
