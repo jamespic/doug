@@ -1,6 +1,6 @@
 package uk.me.jamespic.dougng.model
 import com.orientechnologies.orient.core.metadata.schema.{OSchema, OType, OClass}
-import com.orientechnologies.orient.core.command.OCommandResultListener
+import com.orientechnologies.orient.core.command.{OCommandRequest, OCommandResultListener}
 import com.orientechnologies.orient.core.db.document.ODatabaseDocument
 import com.orientechnologies.orient.core.record.impl.ODocument
 import com.orientechnologies.orient.core.sql.query.OSQLAsynchQuery
@@ -107,7 +107,7 @@ package object util {
   implicit class ObjectDBPimp(val db: ODatabaseDocument) extends AnyVal {
     def asyncSql(sql: String) = {
       new QueryTraversable[ODocument]({listener =>
-        db.query(new OSQLAsynchQuery(sql, listener))
+        new OSQLAsynchQuery(sql, listener).execute(): Any
         ()
       })
     }

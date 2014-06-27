@@ -1,33 +1,47 @@
 package uk.me.jamespic.dougng.model.datamanagement
 
-import akka.actor.{Actor, ActorRef, Stash, Terminated}
-import com.orientechnologies.orient.core.command.{OCommandResultListener, OBasicCommandContext, OCommandContext}
+import java.lang
+import java.util.{Date, Locale}
+
+import akka.actor._
+import com.orientechnologies.orient.core.sql.{ORuntimeResult, OCommandExecutorSQLSelect, OCommandSQL}
 import com.orientechnologies.orient.core.sql.filter.{OSQLTarget, OSQLFilter}
-import com.orientechnologies.orient.core.sql.query.OSQLAsynchQuery
 import scala.collection.JavaConversions._
 import com.orientechnologies.orient.core.record.impl.ODocument
-import scala.collection.mutable.{Map => MMap}
-import uk.me.jamespic.dougng.util.MutableMapReduce
-import uk.me.jamespic.dougng.util.Stats
 import uk.me.jamespic.dougng.model.Dataset
 import scala.util.control.NonFatal
 import scala.concurrent.duration._
-import com.orientechnologies.orient.core.db.document.ODatabaseDocument
 import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
 import com.orientechnologies.orient.core.id.ORecordId
-import com.orientechnologies.orient.core.exception.OQueryParsingException
 import com.orientechnologies.common.exception.OException
 
 object DatasetActor {
-  object ImmutableContext extends OBasicCommandContext {
-    variables = java.util.Collections.emptyMap[String, Object]
-  }
-
-  private def compile(cmd: String, ctx: OCommandContext) = new OSQLFilter(cmd, ctx, null)
-
   private def notifyLaterTime = 1 second // FIXME: This should be configurable
 
   private case object NotificationTime
+
+  private sealed trait NewDataResult
+  private final case class ShouldInsert(data: Traversable[ODocument]) extends NewDataResult
+  private case object CantHandleInsertion extends NewDataResult
+  private trait DataInsertionHandler {
+    def apply(docs: Traversable[ODocument]): NewDataResult
+  }
+  private object SimpleHandler extends DataInsertionHandler {
+    def apply(docs: Traversable[ODocument]) = CantHandleInsertion
+  }
+
+  private val NameField = "name"
+  private val TimestampField = "timestamp"
+  private val ValueField = "value"
+  private val neededProjections = Seq(TimestampField, NameField, ValueField)
+  val SelectQueryRegex = """(?i)SELECT\s+(.+)\s+FROM\s+(.+)\s+WHERE\s+(.+)""".r
+  private object Timestamp {
+    def unapply(x: Any) = x match {
+      case l: Number => Some(l.longValue)
+      case d: Date => Some(d.getTime)
+      case _ => None
+    }
+  }
 
   def constructor(datasetId: String, dataFactory: => DataStore)(consInfo: ConstructorInfo) = {
     new DatasetActor(datasetId, dataFactory, consInfo.pool, consInfo.database)
@@ -38,23 +52,66 @@ class DatasetActor(private var datasetId: String,
     dataFactory: => DataStore,
     pool: ReplacablePool,
     protected val database: ActorRef)
-    extends Actor with Stash with RequestReadOnStart {
+    extends Actor with Stash with RequestReadOnStart with ActorLogging {
   import DatasetActor._
   private var dataOpt: Option[DataStore] = None
   private var listeners = Set.empty[ActorRef]
   private var notificationPending = false
   private var dataset: Dataset = null
 
-  private var classInsertHandler: Option[ClassInsertHandler] = None
+  private var insertHandler: DataInsertionHandler = SimpleHandler
   private var lastError: Option[Throwable] = None
 
   private def updateRecord(db: OObjectDatabaseTx) {
     dataset = db.load(new ORecordId(datasetId))
   }
 
-  private def updateClassInsertHandler {
+  private def updateInsertHandler {
     // Special-case selection from classes, so we can handle inserts deterministically
-    classInsertHandler = classes map (classSet => new ClassInsertHandler(classSet))
+    insertHandler = try {
+      val command = new OCommandSQL(dataset.query)
+      val executor = new OCommandExecutorSQLSelect() // Only used for its parsing capabilities
+      executor.parse(command)
+      val projections = executor.getProjections
+      if ((projections == null)
+          || executor.isAnyFunctionAggregates
+          || !projections.keySet.containsAll(neededProjections)) {
+        SimpleHandler // Can't update incrementally if projections are aggregates or grouped
+      } else {
+        dataset.query match {
+          case SelectQueryRegex(_, table, whereClause) =>
+            val target = new OSQLTarget(table, null, null)
+            val classes = target.getTargetClasses.keySet.toSet
+            val filter = new OSQLFilter(whereClause, null, null)
+            if (classes != null) {
+              new DataInsertionHandler {
+                def apply(docs: Traversable[ODocument]): NewDataResult = {
+                  var i = 0
+                  val insertableRows = for (doc: ODocument <- docs
+                       if classes.exists(_.isSuperClassOf(doc.getSchemaClass))
+                       && filter.evaluate(doc, null, null) == java.lang.Boolean.TRUE) yield {
+                    i += 1
+                    val projection = ORuntimeResult.getProjectionResult(i, projections, null, doc)
+                    projection
+                  }
+                  ShouldInsert(insertableRows)
+                }
+              }
+            } else SimpleHandler
+        }
+      }
+    } catch {
+      case NonFatal(_) => SimpleHandler // If we fail, for any reason, no class browsing
+    }
+  }
+
+  private def insertDocuments(projections: Traversable[ODocument]) = {
+    for (projection <- projections;
+         rowName <- Option(projection.field[Any](NameField));
+         Timestamp(timestamp) <- Option(projection.field[Any](TimestampField));
+         value <- Option(projection.field[Any](ValueField)) if value.isInstanceOf[Number]) {
+      data(rowName.toString) += (timestamp -> value.asInstanceOf[Number].doubleValue)
+    }
   }
 
   override def postStop = {
@@ -143,15 +200,10 @@ class DatasetActor(private var datasetId: String,
     invalidate
     renew
     for (db <- pool) catchingOException(()) {
+        import uk.me.jamespic.dougng.model.util.ObjectDBPimp
         updateRecord(db)
-        updateClassInsertHandler
-
-        val context = new OBasicCommandContext()
-        val browser = browse(db.getUnderlying, context)
-        val compiled = new Compiled(context)
-
-
-        compiled.maybeInsert(browser)
+        updateInsertHandler
+        insertDocuments(db.getUnderlying.asyncSql(dataset.query))
     }
     notifyListeners
   }
@@ -159,12 +211,14 @@ class DatasetActor(private var datasetId: String,
   private def handleInsert(docs: Traversable[ODocument]) {
     if (dataOpt == None) initialise
     else {
-      classInsertHandler match {
-        case None =>
-          sender ! RemindMeLater
-        case Some(handler) =>
-          if (handler.maybeInsert(docs)) notifyListenersLater
-          sender ! AllDone
+      for (db <- pool) {
+        insertHandler(docs) match {
+          case CantHandleInsertion => sender ! RemindMeLater
+          case ShouldInsert(newDocs) =>
+            insertDocuments(newDocs)
+            notifyListenersLater
+            sender ! AllDone
+        }
       }
     }
   }
@@ -184,66 +238,8 @@ class DatasetActor(private var datasetId: String,
   private def catchingOException[X](backup: => X)(f: => X): X = {
     try f
     catch {
-      case ex: OException => backup
-    }
-  }
-
-  private def browse(db: ODatabaseDocument, context: OCommandContext): Traversable[ODocument] =
-  catchingOException(Traversable.empty[ODocument]){
-    classes match {
-      case Some(classSet) =>
-        for (clazz <- classSet;
-             doc <- (db.browseClass(clazz): Iterable[ODocument])) yield doc
-      case None =>
-        import uk.me.jamespic.dougng.model.util.ObjectDBPimp
-        db.asyncSql(s"select * from ${dataset.table}") // Not SQL injection safe, but users can already execute arbitrary SQL
-    }
-  }
-
-  private def classes = {
-    try {
-      val parsed = new OSQLTarget(dataset.table, null, null)
-      Option(parsed.getTargetClasses) map (_.values.toSet)
-    } catch {
-      case NonFatal(_) => None // If we fail, for any reason, no class browsing
-    }
-  }
-
-  private class ClassInsertHandler(val classes: Set[String]) extends Compiled(null) {
-    def handles(tables: Set[String]) = (tables & classes).nonEmpty
-    override def maybeInsert(docs: Traversable[ODocument]) = {
-      for (db <- pool) yield {
-        super.maybeInsert(docs filter {doc => classes contains doc.getClassName.toUpperCase})
-      }
-    }
-  }
-
-  private class Compiled(context: OCommandContext) {
-    val filter = compile(dataset.whereClause, context)
-    val nameComp = compile(dataset.rowName, context)
-    val tsComp = compile(dataset.timestamp, context)
-    val metricComp = compile(dataset.metric, context)
-
-    def maybeInsert(docs: Traversable[ODocument]) = {
-      (false /: docs){(t, d) => t | maybeInsertDoc(d)}
-    }
-
-    def maybeInsertDoc(doc: ODocument): Boolean = catchingOException(false) {
-      val filterValue = filter.evaluate(doc, doc, context)
-      if (filterValue == java.lang.Boolean.TRUE || filterValue == null) {
-        val rowName = nameComp.evaluate(doc, doc, context).toString
-        val ts = tsComp.evaluate(doc, doc, context) match {
-          case l: java.lang.Long => l.longValue
-          case d: java.util.Date => d.getTime()
-        }
-
-        val metric = metricComp.evaluate(doc, doc, context) match {
-          case n: java.lang.Number => n.doubleValue
-        }
-
-        data(rowName) += ts -> metric
-        true
-      } else false
+      case ex: OException =>
+        backup
     }
   }
 }

@@ -69,11 +69,7 @@ trait SimpleDataSet {this: RegisteringMixin =>
 
     // Create Dataset
     var dataset = new Dataset
-    dataset.metric = "responseTime"
-    dataset.rowName = "name"
-    dataset.table = "Sample"
-    dataset.timestamp = "timestamp"
-    dataset.whereClause = "success"
+    dataset.query = "select responseTime as value, name, timestamp from Sample where success"
     dataset = db.save(dataset)
 
 

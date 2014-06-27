@@ -49,9 +49,7 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
       expectMsg(timeout, PleaseUpdate)
 
       var dataset = new Dataset
-      dataset.metric = "value"
-      dataset.rowName = "name"
-      dataset.whereClause = "name = 'MyRow'"
+      dataset.query = "select value, name, timestamp from Sample where name = 'MyRow'"
       dataset = db.save(dataset)
 
       instance ! PleaseUpdate
