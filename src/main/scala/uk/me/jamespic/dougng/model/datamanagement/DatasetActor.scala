@@ -4,6 +4,7 @@ import java.lang
 import java.util.{Date, Locale}
 
 import akka.actor._
+import com.orientechnologies.orient.core.command.OBasicCommandContext
 import com.orientechnologies.orient.core.sql.{ORuntimeResult, OCommandExecutorSQLSelect, OCommandSQL}
 import com.orientechnologies.orient.core.sql.filter.{OSQLTarget, OSQLFilter}
 import scala.collection.JavaConversions._
@@ -87,11 +88,13 @@ class DatasetActor(private var datasetId: String,
               new DataInsertionHandler {
                 def apply(docs: Traversable[ODocument]): NewDataResult = {
                   var i = 0
+                  val context = new OBasicCommandContext
                   val insertableRows = for (doc: ODocument <- docs
                        if classes.exists(_.isSuperClassOf(doc.getSchemaClass))
-                       && filter.evaluate(doc, null, null) == java.lang.Boolean.TRUE) yield {
+                       && filter.evaluate(doc, doc, context) == java.lang.Boolean.TRUE) yield {
                     i += 1
-                    val projection = ORuntimeResult.getProjectionResult(i, projections, null, doc)
+                    context.setVariable("current", doc) // Emulate similar behaviour in OCommandExecutorSQLSelect
+                    val projection = ORuntimeResult.getProjectionResult(i, projections, context, doc)
                     projection
                   }
                   ShouldInsert(insertableRows)
