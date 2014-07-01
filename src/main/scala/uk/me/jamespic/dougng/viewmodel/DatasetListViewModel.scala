@@ -22,7 +22,7 @@ class DatasetListViewModel(pool: ReplacablePool, protected val database: ActorRe
 
   private def delete(docs: Set[String]) = {
     dsMap --= docs
-    sender ! AllDone
+    finished()
   }
 
   private def maybeAdd(docs: Traversable[ODocument]) = {
@@ -34,7 +34,7 @@ class DatasetListViewModel(pool: ReplacablePool, protected val database: ActorRe
       attachedDs.id -> db.detachAll[Dataset](attachedDs, true)
     }
     dsMap ++= newDatasets
-    sender ! AllDone
+    finished()
   }
 
   private def datasetUpdate(idsAffected: Set[String]) = {
@@ -45,17 +45,20 @@ class DatasetListViewModel(pool: ReplacablePool, protected val database: ActorRe
       rid -> db.detachAll[Dataset](reloaded, true)
     }
     dsMap ++= updated
-    sender ! AllDone
+    finished()
   }
 
   private def initialise = {
     for (db <- pool) {
-	  val dsIterator = db.browseClass(classOf[Dataset]): Iterator[Dataset]
-	  val dsList = dsIterator.toSeq
-	  dsMap = dsList.map(ds => ds.id -> ds).toMap
-	  fireUpdated(dsList)
-	}
-	sender ! AllDone
+      val dsIterator = db.browseClass(classOf[Dataset]): Iterator[Dataset]
+      val dsList = dsIterator.toSeq
+      dsMap = dsList.map(ds => ds.id -> ds).toMap
+    }
+    finished()
   }
 
+  private def finished() = {
+    sender ! AllDone
+    fireUpdated(dsMap)
+  }
 }

@@ -79,7 +79,6 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
 
       dsActor ! GetAllSummaries(Seq((1L, 10L)))
       val summary = expectMsgType[Summaries](timeout)
-      // FIXME FIXME FIXME - probable race condition means MyRow sometimes doesn't exist
       val rowMap = summary.result("MyRow").toMap
       rowMap((1L, 10L)).get.getSum should be (55.0 +- 0.1)
 
