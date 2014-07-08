@@ -41,7 +41,7 @@ class TimeGraphViewModel(recordId: String, pool: ReplacablePool, protected val d
 
   private def handleDataUpdate(msg: PleaseUpdate) = msg match {
     case PleaseRead => initialise
-    case DatasetUpdate(ids) if ((ids & (receivedDatasets.keySet + recordId)).nonEmpty) => initialise
+    case DatasetUpdate(ids) if (ids & (receivedDatasets.keySet + recordId)).nonEmpty => initialise
     case DocumentsDeleted(docs) if docs contains recordId => shutdown
     case _ => database ! AllDone
   }

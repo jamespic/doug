@@ -6,7 +6,6 @@ import org.scalatest.FunSpecLike
 import uk.me.jamespic.dougng.model.{Dataset, RegisteringMixin}
 import org.scalatest.GivenWhenThen
 import org.scalatest.Matchers
-import akka.testkit.TestActorRef
 import akka.actor.{Props, ActorSystem}
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
