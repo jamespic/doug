@@ -69,7 +69,6 @@ class PageCacheAllocator(cacheSize: Int = 2048) extends AbstractFileAllocator {s
       buffer.limit(off + size)
       buffer.position(off)
       ser.serialize(value, buffer)
-      page.dirty = true
       page.dirtyStart = page.dirtyStart min off
       page.dirtyEnd = page.dirtyEnd max off + size
     }
@@ -78,7 +77,7 @@ class PageCacheAllocator(cacheSize: Int = 2048) extends AbstractFileAllocator {s
   }
 
   private[PageCacheAllocator] class Page(val handle: Long, size: Int) {
-    var dirty = false
+    def dirty = dirtyStart <= dirtyEnd
     /*
      * initialise dirtyStart to size and dirtyEnd to 0, so
      * that max and min will bring them into line when dirtied
@@ -88,7 +87,6 @@ class PageCacheAllocator(cacheSize: Int = 2048) extends AbstractFileAllocator {s
     private[this] var _buffer: ByteBuffer = null
 
     def markClean = {
-      dirty = false
       dirtyStart = size
       dirtyEnd = 0
     }
@@ -104,7 +102,6 @@ class PageCacheAllocator(cacheSize: Int = 2048) extends AbstractFileAllocator {s
 
     def zero = {
       _buffer = ByteBuffer.allocate(size)
-      dirty = true
       dirtyStart = 0
       dirtyEnd = size
       this

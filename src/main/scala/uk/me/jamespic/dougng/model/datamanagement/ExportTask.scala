@@ -48,16 +48,19 @@ class ExportTask(receiver: ActorRef, val database: ActorRef, pool: OObjectDataba
     for (db <- pool) {
       db.freeze()
       try {
-        new ODatabaseExport(db.getUnderlying.getUnderlying, new OutputStream {
-          override def write(b: Int): Unit = write(Array(b.toByte))
-          override def write(b: Array[Byte]): Unit = receiver ! DataFragment(Input.El(b))
-          override def write(b: Array[Byte], off: Int, len: Int): Unit = write(b.slice(off, off + len))
-          override def close(): Unit = {
-            receiver ! DataFragment(Input.EOF)
-            context.stop(self)
-            super.close()
-          }
-        }, new OCommandOutputListener {override def onMessage(iText: String): Unit = ()}).exportDatabase()
+        new ODatabaseExport(db.getUnderlying.getUnderlying,
+          new OutputStream {
+            override def write(b: Int): Unit = write(Array(b.toByte))
+            override def write(b: Array[Byte]): Unit = receiver ! DataFragment(Input.El(b))
+            override def write(b: Array[Byte], off: Int, len: Int): Unit = write(b.slice(off, off + len))
+            override def close(): Unit = {
+              receiver ! DataFragment(Input.EOF)
+              database ! AllDone
+              context.stop(self)
+              super.close()
+            }
+          },
+          new OCommandOutputListener {override def onMessage(iText: String): Unit = ()}).exportDatabase()
       } finally {
         db.release()
       }

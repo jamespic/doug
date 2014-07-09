@@ -21,9 +21,14 @@ class ExportTaskTest(_system: ActorSystem) extends TestKit(_system) with
       val db = system.actorOf(Props(new Database(dbUri)))
 
       val resultFuture = ExportTask.export(db) |>>> Iteratee.consume()
-      val result = Await.result(resultFuture, 20 seconds)
+      val result = Await.result(resultFuture, 120 seconds)
       val json = spray.json.JsonParser(new String(result, StandardCharsets.UTF_8))
       json.asJsObject.fields should contain key "schema"
+
+      // Check database is still accepting read requests
+      db ! RequestPermissionToRead
+      expectMsg(5 seconds, PleaseRead)
+      db ! AllDone
     }
 
   }
