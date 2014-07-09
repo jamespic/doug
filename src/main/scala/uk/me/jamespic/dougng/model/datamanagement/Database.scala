@@ -5,7 +5,7 @@ import java.util.LinkedList
 import java.util.Queue
 import scala.collection.mutable.{Map => MMap}
 import scala.concurrent.Future
-import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
+import com.orientechnologies.orient.`object`.db.{OObjectDatabasePool, OObjectDatabaseTx}
 import scala.concurrent.Promise
 import uk.me.jamespic.dougng.model.DatasetName
 import scala.collection.JavaConversions._
@@ -19,8 +19,7 @@ class Database(url: String) extends Actor with ActorLogging {
   import Database._
   override val supervisorStrategy = SupervisorStrategy.stoppingStrategy
 
-  private val pool = new ReplacablePool
-  pool.url = url
+  private val pool = new OObjectDatabasePool(url, "admin", "admin")
 
   private val responseCounts = MMap.empty[ActorRef, Int].withDefault(_ => 0)
   private val bigOpQueue = new LinkedList[ActorRef]

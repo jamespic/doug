@@ -38,6 +38,8 @@ libraryDependencies <++= (scalaVersion)(sv =>
     Seq("org.scala-lang" % "scala-reflect" % sv)
 )
 
+parallelExecution in Test := false
+
 val bootstrapZip = SettingKey[String]("bootstrap-zip-url")
 
 bootstrapZip := "https://github.com/twbs/bootstrap/releases/download/v3.2.0/bootstrap-3.2.0-dist.zip"

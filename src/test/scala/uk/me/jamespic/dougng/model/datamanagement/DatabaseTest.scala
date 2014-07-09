@@ -113,7 +113,7 @@ class DatabaseTest(_system: ActorSystem) extends TestKit(_system) with
       eventually {responseCount.intValue should equal(2)}
 
       // Test that actor termination is as good as AllDone
-      instance ! CreateDataDependentActor((pool => Props[NoopActor]), "BadActor")
+      instance ! CreateDataDependentActor(pool => Props[NoopActor], "BadActor")
       val ActorCreated(badActor, name) = expectMsgClass(classOf[ActorCreated])
 
       instance ! RequestPermissionToUpdate

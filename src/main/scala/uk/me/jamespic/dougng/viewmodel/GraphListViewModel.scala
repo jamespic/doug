@@ -4,11 +4,12 @@ import akka.actor.ActorRef
 import scala.collection.JavaConversions._
 import uk.me.jamespic.dougng.model.datamanagement._
 import uk.me.jamespic.dougng.model.Graph
-import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
+import com.orientechnologies.orient.`object`.db.{OObjectDatabasePool, OObjectDatabaseTx}
 import akka.actor.Props
 import uk.me.jamespic.dougng.model.datamanagement.RequestReadOnStart
 import akka.actor.Terminated
 import com.orientechnologies.orient.core.record.impl.ODocument
+import uk.me.jamespic.dougng.model.util._
 
 object GraphListViewModel {
   type ViewModelFactory = PartialFunction[Graph, CreateDataDependentActor]
@@ -20,7 +21,7 @@ object GraphListViewModel {
 
 class GraphListViewModel(
     viewModelFactory: GraphListViewModel.ViewModelFactory,
-    pool: ReplacablePool,
+    pool: OObjectDatabasePool,
     protected val database: ActorRef) extends SubscribableVariable with RequestReadOnStart {
   import GraphListViewModel._
 

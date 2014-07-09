@@ -1,4 +1,6 @@
 package uk.me.jamespic.dougng.model.datamanagement
+
+import com.orientechnologies.orient.`object`.db.OObjectDatabasePool
 import com.orientechnologies.orient.core.record.impl.ODocument
 import uk.me.jamespic.dougng.util.Stats
 import akka.actor.{Props, ActorRef}
@@ -10,7 +12,7 @@ import akka.actor.{Props, ActorRef}
  * and once they receive permission (via a PermissionToUpdate), they have permission until
  * they relinquish it with an UpdateComplete.
  */
-case class ConstructorInfo(pool: ReplacablePool, database: ActorRef)
+case class ConstructorInfo(pool: OObjectDatabasePool, database: ActorRef)
 case class CreateDataDependentActor(constructor: ConstructorInfo => Props, name: String)
 case class ActorCreated(actor: ActorRef, name: String)
 case class GetDataset(recordId: String)

@@ -12,9 +12,11 @@ import com.orientechnologies.orient.core.record.impl.ODocument
 import uk.me.jamespic.dougng.model.Dataset
 import scala.util.control.NonFatal
 import scala.concurrent.duration._
-import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
+import com.orientechnologies.orient.`object`.db.{OObjectDatabasePool, OObjectDatabaseTx}
 import com.orientechnologies.orient.core.id.ORecordId
 import com.orientechnologies.common.exception.OException
+import uk.me.jamespic.dougng.model.util._
+
 
 object DatasetActor {
   private def notifyLaterTime = 1 second // FIXME: This should be configurable
@@ -51,7 +53,7 @@ object DatasetActor {
 
 class DatasetActor(private var datasetId: String,
     dataFactory: => DataStore,
-    pool: ReplacablePool,
+    pool: OObjectDatabasePool,
     protected val database: ActorRef)
     extends Actor with Stash with RequestReadOnStart with ActorLogging {
   import DatasetActor._

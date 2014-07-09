@@ -1,5 +1,6 @@
 package uk.me.jamespic.dougng.viewmodel
 
+import com.orientechnologies.orient.`object`.db.OObjectDatabasePool
 import com.orientechnologies.orient.core.id.ORecordId
 import com.orientechnologies.orient.core.record.impl.ODocument
 import org.scalatest.FunSpecLike
@@ -21,8 +22,6 @@ class DatasetListViewModelTest(_system: ActorSystem) extends TestKit(_system) wi
   def this() = this(ActorSystem("TestSystem"))
   describe("A DatasetListViewModel") {
     it("should provide a subscribable list of all datasets") {
-      val pool = new ReplacablePool
-      pool.url = dbUri
       val instance = system.actorOf(Props(new DatasetListViewModel(pool, self)))
 
       expectMsg(RequestPermissionToRead)

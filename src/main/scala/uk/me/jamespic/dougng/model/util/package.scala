@@ -5,7 +5,7 @@ import com.orientechnologies.orient.core.db.document.ODatabaseDocument
 import com.orientechnologies.orient.core.record.impl.ODocument
 import com.orientechnologies.orient.core.sql.query.OSQLAsynchQuery
 import com.orientechnologies.orient.`object`.enhancement.OObjectEntityEnhancer
-import com.orientechnologies.orient.`object`.db.OObjectDatabaseTx
+import com.orientechnologies.orient.`object`.db.{OObjectDatabaseTxPooled, OObjectDatabasePool, OObjectDatabaseTx}
 import com.orientechnologies.orient.core.db.ODatabaseComplex
 import com.orientechnologies.orient.core.metadata.schema.OProperty
 
@@ -123,5 +123,17 @@ package object util {
       val rem = n % d
       n - (if (rem >= 0) rem else rem + d)
     }
+  }
+
+  implicit class PoolPimp(val pool: OObjectDatabasePool) extends AnyVal {
+    def map[X](f: OObjectDatabaseTx => X) = {
+      val db = pool.acquire()
+      try {
+        f(db)
+      } finally db.close()
+    }
+
+    def flatMap[X](f: OObjectDatabaseTx => X) = map(f)
+    def foreach[U](f: OObjectDatabaseTx => U): Unit = map(f)
   }
 }

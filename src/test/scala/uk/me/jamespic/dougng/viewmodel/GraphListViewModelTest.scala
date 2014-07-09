@@ -1,5 +1,6 @@
 package uk.me.jamespic.dougng.viewmodel
 
+import com.orientechnologies.orient.`object`.db.OObjectDatabasePool
 import org.scalatest.FunSpecLike
 import uk.me.jamespic.dougng.model.RegisteringMixin
 import org.scalatest.GivenWhenThen
@@ -31,8 +32,7 @@ class GraphListViewModelTest(_system: ActorSystem) extends TestKit(_system) with
   describe("A GraphListViewModel") {
     it("should provide a subscribable list of all Graphs") {
       val rid = createDummyTimeGraph("Graph1")
-      val pool = new ReplacablePool
-      pool.url = dbUri
+      val pool = new OObjectDatabasePool(dbUri, "admin", "admin")
       val instance = system.actorOf(Props(new GraphListViewModel(dummyFactory, pool, self)))
       expectMsg(RequestPermissionToRead)
       instance ! PleaseRead
@@ -108,8 +108,7 @@ class GraphListViewModelTest(_system: ActorSystem) extends TestKit(_system) with
     
     it("should handle actor failures, by requesting updates") {
       val rid = createDummyTimeGraph("Graph1")
-      val pool = new ReplacablePool
-      pool.url = dbUri
+
       val instance = system.actorOf(Props(new GraphListViewModel(dummyFactory, pool, self)))
       expectMsg(RequestPermissionToRead)
       instance ! PleaseRead

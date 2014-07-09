@@ -40,9 +40,6 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
 
       val datasetId = dataset.id
 
-      val pool = new ReplacablePool
-      pool.url = dbUri
-
       // Put some simple data in the database
       for (db <- pool; i <- 1L to 100L) {
         val sample = Sample("MyRow", new Date(i))
@@ -116,9 +113,6 @@ class DatasetActorTest(_system: ActorSystem) extends TestKit(_system) with
       dataset = db.save(dataset)
 
       val datasetId = dataset.id
-
-      val pool = new ReplacablePool
-      pool.url = dbUri
 
       val instance = system.actorOf(Props(new DatasetActor(datasetId, DataStore.memory, pool, self)))
       expectMsg(RequestPermissionToRead)

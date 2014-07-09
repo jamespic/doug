@@ -1,6 +1,7 @@
 package uk.me.jamespic.dougng.viewmodel
 
 import akka.actor.ActorRef
+import com.orientechnologies.orient.`object`.db.OObjectDatabasePool
 import uk.me.jamespic.dougng.model.datamanagement._
 import com.orientechnologies.orient.core.id.ORecordId
 import uk.me.jamespic.dougng.model.TimeGraph
@@ -11,6 +12,7 @@ import uk.me.jamespic.dougng.util.Stats
 import akka.actor.Props
 import uk.me.jamespic.dougng.model.TimeGraphViewModelName
 import uk.me.jamespic.dougng.model.datamanagement.RequestReadOnStart
+import uk.me.jamespic.dougng.model.util._
 
 object TimeGraphViewModel {
   def constructMsg(recordId: String) = {
@@ -21,7 +23,7 @@ object TimeGraphViewModel {
   }
 }
 
-class TimeGraphViewModel(recordId: String, pool: ReplacablePool, protected val database: ActorRef)
+class TimeGraphViewModel(recordId: String, pool: OObjectDatabasePool, protected val database: ActorRef)
     extends SubscribableVariable with RequestReadOnStart {
   type Row = SortedMap[(Long, Long), Double]
   type Table = SortedMap[String, Row]

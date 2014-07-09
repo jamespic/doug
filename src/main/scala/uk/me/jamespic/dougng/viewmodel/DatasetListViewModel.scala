@@ -1,5 +1,6 @@
 package uk.me.jamespic.dougng.viewmodel
 
+import com.orientechnologies.orient.`object`.db.OObjectDatabasePool
 import uk.me.jamespic.dougng.model.datamanagement._
 import akka.actor.ActorRef
 import uk.me.jamespic.dougng.model.datamanagement.RequestReadOnStart
@@ -7,9 +8,10 @@ import uk.me.jamespic.dougng.model.Dataset
 import scala.collection.JavaConversions._
 import scala.collection.generic.CanBuildFrom
 import com.orientechnologies.orient.core.record.impl.ODocument
+import uk.me.jamespic.dougng.model.util._
 
 // FIXME: Test this
-class DatasetListViewModel(pool: ReplacablePool, protected val database: ActorRef)
+class DatasetListViewModel(pool: OObjectDatabasePool, protected val database: ActorRef)
     extends SubscribableVariable with RequestReadOnStart {
   var dsMap = Map.empty[String, Dataset]
   override def receive = super.receive orElse {

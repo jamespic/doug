@@ -12,6 +12,9 @@ trait RegisteringMixin extends OrientMixin {
       val text = f.text
       def apply() = {
         util.initDB
+        if (db.getEntityManager.getRegisteredEntities.size < 6) {
+          println(s"*** Initialisation failed: Current entities: ${db.getEntityManager.getRegisteredEntities}")
+        }
         try f()
         finally util.uninitDB
       }
