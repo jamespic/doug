@@ -1,7 +1,7 @@
 package uk.me.jamespic.dougng.model.datamanagement
 
 import akka.actor.{Actor, ActorRef}
-import akka.actor.actorRef2Scala
+
 
 trait ExclusiveTask extends Actor {
   protected val database: ActorRef

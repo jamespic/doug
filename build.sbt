@@ -21,10 +21,10 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++=  Seq(
-  "com.orientechnologies" % "orientdb-core" % "1.7.3",
-  "com.orientechnologies" % "orientdb-object" % "1.7.3",
-  "com.orientechnologies" % "orient-commons" % "1.7.3",
-  "com.orientechnologies" % "orientdb-server" % "1.7.3",
+  "com.orientechnologies" % "orientdb-core" % "1.7.4",
+  "com.orientechnologies" % "orientdb-object" % "1.7.4",
+  "com.orientechnologies" % "orient-commons" % "1.7.4",
+  "com.orientechnologies" % "orientdb-server" % "1.7.4",
   "org.scalatest" % "scalatest_2.10" % "2.2.0" % "test",
   "com.typesafe.akka" %% "akka-actor" % "2.3.3",
   "com.typesafe.akka" %% "akka-testkit" % "2.3.3",

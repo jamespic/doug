@@ -3,6 +3,10 @@ package uk.me.jamespic.dougng.model.datamanagement
 import akka.actor.{Actor, ActorRef, Terminated, ActorLogging, Props}
 import java.util.LinkedList
 import java.util.Queue
+
+import com.orientechnologies.orient.core.command.OCommandOutputListener
+import com.orientechnologies.orient.core.db.tool.ODatabaseImport
+
 import scala.collection.mutable.{Map => MMap}
 import scala.concurrent.Future
 import com.orientechnologies.orient.`object`.db.{OObjectDatabasePool, OObjectDatabaseTx}
@@ -10,9 +14,36 @@ import scala.concurrent.Promise
 import uk.me.jamespic.dougng.model.DatasetName
 import scala.collection.JavaConversions._
 import akka.actor.SupervisorStrategy
+import uk.me.jamespic.dougng.model.util._
+import java.io.InputStream
 
 object Database {
   def dataFactory = DataStore.disk
+
+  def createEmpty(url: String) = {
+    val db = new OObjectDatabaseTx(url)
+    db.create(): OObjectDatabaseTx
+    initDB(db)
+    try Props(classOf[Database], url)
+    finally db.close()
+  }
+
+  def openExisting(url: String) = {
+    val db = new OObjectDatabaseTx(url)
+    db.open("admin","admin")
+    registerClasses(db)
+    try Props(classOf[Database], url)
+    finally db.close()
+  }
+
+  def importData(url: String, input: InputStream) = {
+    val db = new OObjectDatabaseTx(url)
+    db.create(): OObjectDatabaseTx
+    registerClasses(db)
+    new ODatabaseImport(db.getUnderlying, input, new OCommandOutputListener {def onMessage(iText: String) = ()}).importDatabase()
+    try Props(classOf[Database], url)
+    finally db.close()
+  }
 }
 
 class Database(url: String) extends Actor with ActorLogging {
@@ -172,7 +203,7 @@ class Database(url: String) extends Actor with ActorLogging {
     val name = DatasetName(recordId)
     val ds = datasets.getOrElse(recordId, {
       val actor = superviseNewActor(
-          Props(new DatasetActor(recordId, dataFactory, pool, self)), name)
+          Props(classOf[DatasetActor], recordId, dataFactory, pool, self), name)
       datasets += recordId -> actor
       actor
     })
